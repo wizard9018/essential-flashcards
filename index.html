@@ -92,10 +92,25 @@ let qprog=qstore.get(); const stars=k=>qprog[k]||0;
 const starStr=n=>"★".repeat(n)+"☆".repeat(3-n);
 const COLORS=["#2f8f5b","#2f6fa8","#a85f2f","#8a4fa8","#b0384f"];
 function xpTotal(){return qprog.xp||0}
+const wstore={get(){try{return JSON.parse(localStorage.getItem("ef.wrong")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.wrong",JSON.stringify(p))}catch(e){}}};
+let wrong=wstore.get();   // "L.word" -> consecutive correct answers since last miss; removed at 2
+const wrongWords=l=>unitsOf(l).flatMap(u=>u.words).filter(w=>(key(l,w.w) in wrong));
+function recordAnswer(l,w,ok){const k=key(l,w.w);if(!ok)wrong[k]=0;else if(k in wrong){wrong[k]++;if(wrong[k]>=2)delete wrong[k]}wstore.set(wrong)}
+function mistakes(l){
+  const ws=wrongWords(l);
+  const d=document.createElement("dialog");
+  d.innerHTML=`<h3 style="margin-top:0">📕 Mistakes (${ws.length})</h3>`+(ws.length?`<p style="color:var(--mute);max-height:140px;overflow:auto">${ws.map(w=>w.w).join(", ")}</p><p style="color:var(--mute);font-size:13px">A word leaves this list after you answer it correctly twice in a row.</p><div class="row"><button class="primary" id="mq">Quiz me</button><button id="mc">Flashcards</button><button id="mcl">Clear</button><button id="dx">Close</button></div>`:`<p>No mistakes yet. Wrong answers in quizzes are collected here.</p><div class="row"><button id="dx">Close</button></div>`);
+  document.body.appendChild(d);d.showModal();d.onclose=()=>d.remove();
+  d.querySelector("#dx").onclick=()=>d.close();
+  if(!ws.length)return;
+  d.querySelector("#mq").onclick=()=>{d.close();startQuiz(l,shuffle(ws).slice(0,20),"Mistakes",null)};
+  d.querySelector("#mc").onclick=()=>{d.close();study(l,ws,"Level "+l+" · mistakes",true)};
+  d.querySelector("#mcl").onclick=()=>{if(confirm("Clear the mistakes list for this level?")){ws.forEach(w=>delete wrong[key(l,w.w)]);wstore.set(wrong);d.close();level(l)}};
+}
 function level(l){
   st=null;qz=null; $("#homeBtn").classList.remove("hidden"); $("#title").textContent="Level "+l;
   const us=unitsOf(l);
-  let h=`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to quiz or study</p><div class="row" style="justify-content:flex-start;margin-bottom:6px"><button id="all">Flashcards: whole level</button><button id="weak">Flashcards: still learning</button></div>`;
+  let h=`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to quiz or study</p><div class="row" style="justify-content:flex-start;margin-bottom:6px"><button id="all">Flashcards: whole level</button><button id="weak">Flashcards: still learning</button><button id="mist">📕 Mistakes (${wrongWords(l).length})</button></div>`;
   for(let g=0;g<5;g++){
     const c=COLORS[g];
     h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="path">`;
@@ -105,6 +120,7 @@ function level(l){
   }
   app.innerHTML=h;
   app.querySelectorAll(".node").forEach(b=>b.onclick=()=>b.dataset.r?sheet(l,null,+b.dataset.r):sheet(l,+b.dataset.n));
+  $("#mist").onclick=()=>mistakes(l);
   $("#all").onclick=()=>study(l,us.flatMap(u=>u.words),"Level "+l+" · all",true);
   $("#weak").onclick=()=>{const ws=us.flatMap(u=>u.words).filter(w=>progress[key(l,w.w)]===0);ws.length?study(l,ws,"Level "+l+" · learning",true):alert("No words marked as 'still learning' yet.")};
 }
@@ -196,7 +212,7 @@ function qdraw(){
   if(qz.hearts<=0){app.innerHTML=`<div class="qend"><h2>Out of hearts 💔</h2><p>Review the words and try again.</p><div class="row"><button class="primary" id="r1">Try again</button><button id="r2">Back</button></div></div>`;$("#r1").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);$("#r2").onclick=()=>level(qz.l);return}
   if(!q){
     const acc=qz.right/qz.seen,s=acc>=.9?3:acc>=.7?2:1,xp=qz.right*10+(s===3?20:0);
-    qprog[qz.k]=Math.max(stars(qz.k),s);qprog.xp=xpTotal()+xp;qstore.set(qprog);
+    if(qz.k)qprog[qz.k]=Math.max(stars(qz.k),s);qprog.xp=xpTotal()+xp;qstore.set(qprog);
     app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p><div class="row"><button class="primary" id="r1">Continue</button><button id="r2">Again</button></div></div>`;
     $("#r1").onclick=()=>level(qz.l);$("#r2").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);return}
   const pr=100*qz.i/qz.qs.length;
@@ -213,6 +229,7 @@ function qdraw(){
 function answer(ok,idx){
   if(qz.st!=="ask")return;qz.st="done";
   const q=qz.qs[qz.i];qz.seen++;
+  recordAnswer(qz.l,q.w,ok);
   if(ok)qz.right++;else{qz.hearts--;if(!q.retry){const r=makeQ(q.w,qz.pool);r.retry=1;qz.qs.push(r)}}
   app.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i===q.a)b.classList.add("right");else if(i===idx)b.classList.add("wrong")});
   const inp=$("#qin");if(inp)inp.readOnly=true;
