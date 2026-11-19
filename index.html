@@ -38,6 +38,28 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
 .badge{position:absolute;top:12px;left:14px;font-size:13px}
 .list td,.list th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 .list{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
+.ubanner{display:flex;justify-content:space-between;color:#fff;padding:12px 16px;border-radius:12px;margin:22px 0 14px}
+.path{display:flex;flex-direction:column;align-items:center;gap:12px}
+.node{width:76px;height:76px;border-radius:50%;background:var(--c);color:#fff;border:0;border-bottom:6px solid rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;padding:0}
+.node span{font-size:24px;font-weight:700}.node small{font-size:10px;letter-spacing:1px}
+.node.done{box-shadow:0 0 0 4px var(--bg),0 0 0 7px var(--c)}
+.node.review{border-radius:22px}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:20px;max-width:340px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.qtop{display:flex;align-items:center;gap:12px}.qtop button{padding:4px 10px}
+.qbar{flex:1;height:14px;background:var(--line);border-radius:7px;overflow:hidden}.qbar i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.qbody{min-height:360px;padding:26px 0}
+.qsub{color:var(--mute);margin-bottom:10px}.qp{font-size:22px;margin-bottom:22px}.qp.big{font-size:40px;font-weight:700}
+.spk2{padding:2px 8px;vertical-align:middle}
+.opts{display:grid;gap:10px}
+.opt{text-align:left;padding:14px;border-width:2px;border-bottom-width:4px;font-size:17px}
+.opt b{display:inline-block;width:26px;color:var(--mute)}
+.opt.right{border-color:var(--ok);background:rgba(47,143,91,.15)}.opt.wrong{border-color:var(--bad);background:rgba(194,81,47,.15)}
+#qin{width:100%;font:inherit;font-size:20px;padding:14px;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
+.qfoot{position:sticky;bottom:0;padding:14px 16px;margin:0 -16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.qfoot.fok{background:rgba(47,143,91,.18)}.qfoot.fbad{background:rgba(194,81,47,.18)}
+.fb small{color:var(--mute)}
+.qend{text-align:center;padding:40px 0}.bigstars{font-size:52px;color:#e0a82e;letter-spacing:6px}
 .hidden{display:none}
 </style>
 </head>
@@ -65,23 +87,47 @@ function home(){
   app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>level(+b.dataset.l));
   $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);home()}};
 }
+const qstore={get(){try{return JSON.parse(localStorage.getItem("ef.quiz")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.quiz",JSON.stringify(p))}catch(e){}}};
+let qprog=qstore.get(); const stars=k=>qprog[k]||0;
+const starStr=n=>"★".repeat(n)+"☆".repeat(3-n);
+const COLORS=["#2f8f5b","#2f6fa8","#a85f2f","#8a4fa8","#b0384f"];
+function xpTotal(){return qprog.xp||0}
 function level(l){
-  st=null; $("#homeBtn").classList.remove("hidden"); $("#title").textContent="Level "+l;
+  st=null;qz=null; $("#homeBtn").classList.remove("hidden"); $("#title").textContent="Level "+l;
   const us=unitsOf(l);
-  app.innerHTML=`<p class="crumb">Level ${l} — choose a unit</p><div class="row" style="justify-content:flex-start;margin-bottom:14px"><button class="primary" id="all">Study whole level (shuffled)</button><button id="weak">Review words I'm still learning</button></div><div class="grid">`+
-   us.map(u=>{const k=known(u.words);return `<button class="tile" data-u="${u.unit}"><b>Unit ${u.unit}</b><small>${k} / ${u.words.length} known</small><div class="bar"><i style="width:${100*k/u.words.length}%"></i></div></button>`}).join("")+"</div>";
-  app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>unit(l,+b.dataset.u));
+  let h=`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to quiz or study</p><div class="row" style="justify-content:flex-start;margin-bottom:6px"><button id="all">Flashcards: whole level</button><button id="weak">Flashcards: still learning</button></div>`;
+  for(let g=0;g<5;g++){
+    const c=COLORS[g];
+    h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="path">`;
+    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${stars(k)?"done":""}" style="--c:${c};margin-left:${[0,44,70,44,0,-44][j]}px" data-n="${n}"><span>${n}</span><small>${stars(k)?starStr(stars(k)):"START"}</small></button>`}
+    const rk=l+".r"+(g+1);
+    h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
+  }
+  app.innerHTML=h;
+  app.querySelectorAll(".node").forEach(b=>b.onclick=()=>b.dataset.r?sheet(l,null,+b.dataset.r):sheet(l,+b.dataset.n));
   $("#all").onclick=()=>study(l,us.flatMap(u=>u.words),"Level "+l+" · all",true);
   $("#weak").onclick=()=>{const ws=us.flatMap(u=>u.words).filter(w=>progress[key(l,w.w)]===0);ws.length?study(l,ws,"Level "+l+" · learning",true):alert("No words marked as 'still learning' yet.")};
+}
+function sheet(l,n,r){
+  const d=document.createElement("dialog");
+  const title=r?`Unit ${r} test`:`Chapter ${n}`;
+  d.innerHTML=`<h3 style="margin-top:0">${title}</h3><p style="color:var(--mute)">${r?"20 questions from chapters "+((r-1)*6+1)+"–"+(r*6)+".":"20 words."}</p><div class="row"><button class="primary" id="dq">Start quiz</button>${r?"":'<button id="dc">Flashcards</button>'}<button id="dx">Close</button></div>`;
+  document.body.appendChild(d);d.showModal();
+  d.querySelector("#dx").onclick=()=>{d.close()};
+  d.onclose=()=>d.remove();
+  d.querySelector("#dq").onclick=()=>{d.close();
+    if(r){const ws=shuffle(unitsOf(l).filter(u=>u.unit>(r-1)*6&&u.unit<=r*6).flatMap(u=>u.words)).slice(0,20);startQuiz(l,ws,"Unit "+r+" test",l+".r"+r)}
+    else startQuiz(l,unitsOf(l).find(u=>u.unit===n).words,"Chapter "+n,l+"."+n)};
+  if(!r)d.querySelector("#dc").onclick=()=>{d.close();unit(l,n)};
 }
 function unit(l,n){
   const u=DECK.find(x=>x.level===l&&x.unit===n);
   $("#homeBtn").classList.remove("hidden");
-  app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Unit ${n}</p><div class="row" style="justify-content:flex-start"><button class="primary" id="go">Start flashcards</button><button id="shuf">Shuffled</button></div>
+  app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Chapter ${n}</p><div class="row" style="justify-content:flex-start"><button class="primary" id="go">Start flashcards</button><button id="shuf">Shuffled</button></div>
   <table class="list"><tr><th>Word</th><th>Meaning</th></tr>${u.words.map(w=>`<tr><td><b>${w.w}</b>${w.pos?` <i style="color:var(--mute)">${w.pos}.</i>`:""}${progress[key(l,w.w)]===1?" ✓":""}</td><td>${w.d}</td></tr>`).join("")}</table>`;
   $("#back").onclick=e=>{e.preventDefault();level(l)};
-  $("#go").onclick=()=>study(l,u.words,"Level "+l+" · Unit "+n,false,n);
-  $("#shuf").onclick=()=>study(l,u.words,"Level "+l+" · Unit "+n,true,n);
+  $("#go").onclick=()=>study(l,u.words,"Level "+l+" · Chapter "+n,false,n);
+  $("#shuf").onclick=()=>study(l,u.words,"Level "+l+" · Chapter "+n,true,n);
 }
 const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function hl(text,word){
@@ -123,7 +169,65 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="k"||e.key==="K")mark(1);else if(e.key==="l"||e.key==="L")mark(0);
   else if(e.key==="p"||e.key==="P")speak(st.flip?(st.ws[st.i].e||st.ws[st.i].d):st.ws[st.i].w);
 });
-$("#homeBtn").onclick=home;
+
+let qz=null;
+const stemOf=w=>{const x=w.length>4?w.slice(0,Math.max(3,w.length-2)):w;return x.replace(/[^a-z]/g,"")};
+const mask=(t,w)=>t.replace(new RegExp("\\b"+stemOf(w)+"[a-z]*","ig"),"_____");
+function pick(w,pool,n){
+  const same=shuffle(pool.filter(p=>p.w!==w.w&&p.pos===w.pos)),oth=shuffle(pool.filter(p=>p.w!==w.w&&p.pos!==w.pos));
+  return same.concat(oth).slice(0,n);
+}
+function makeQ(w,pool){
+  const md=mask(w.d,w.w),me=w.e?mask(w.e,w.w):"";
+  const types=["meaning","meaning","word","blank","blank","type"].filter(t=>t==="meaning"||(t==="word"&&md!==w.d)||(t==="blank"&&me&&me!==w.e)||(t==="type"&&md!==w.d));
+  const t=types[Math.random()*types.length|0],ds=pick(w,pool,3);
+  if(t==="meaning"){const o=shuffle([w,...ds]);return{w,t,p:w.w,sub:"What does it mean?",say:w.w,opts:o.map(x=>x.d),a:o.indexOf(w)}}
+  if(t==="word"){const o=shuffle([w,...ds]);return{w,t,p:md,sub:"Which word fits this meaning?",opts:o.map(x=>x.w),a:o.indexOf(w)}}
+  if(t==="blank"){const o=shuffle([w,...ds]);return{w,t,p:me,sub:"Fill in the blank",opts:o.map(x=>x.w),a:o.indexOf(w)}}
+  return{w,t,p:md,sub:"Type the word",type:true}
+}
+function startQuiz(l,ws,label,k){
+  const pool=unitsOf(l).flatMap(u=>u.words);
+  st=null;qz={l,k,label,pool,words:ws,qs:shuffle(ws).map(w=>makeQ(w,pool)),i:0,hearts:5,right:0,seen:0,st:"ask"};
+  $("#homeBtn").classList.remove("hidden");$("#title").textContent=label;qdraw();
+}
+function qdraw(){
+  const q=qz.qs[qz.i];
+  if(qz.hearts<=0){app.innerHTML=`<div class="qend"><h2>Out of hearts 💔</h2><p>Review the words and try again.</p><div class="row"><button class="primary" id="r1">Try again</button><button id="r2">Back</button></div></div>`;$("#r1").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);$("#r2").onclick=()=>level(qz.l);return}
+  if(!q){
+    const acc=qz.right/qz.seen,s=acc>=.9?3:acc>=.7?2:1,xp=qz.right*10+(s===3?20:0);
+    qprog[qz.k]=Math.max(stars(qz.k),s);qprog.xp=xpTotal()+xp;qstore.set(qprog);
+    app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p><div class="row"><button class="primary" id="r1">Continue</button><button id="r2">Again</button></div></div>`;
+    $("#r1").onclick=()=>level(qz.l);$("#r2").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);return}
+  const pr=100*qz.i/qz.qs.length;
+  app.innerHTML=`<div class="qtop"><button id="qx" title="Quit">✕</button><div class="qbar"><i style="width:${pr}%"></i></div><span>❤️ ${qz.hearts}</span></div>
+  <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp ${q.t==="meaning"?"big":""}">${esc(q.p)} ${q.say?'<button class="spk2" id="qs">🔊</button>':""}</div>
+  ${q.type?`<input id="qin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type here…">`:`<div class="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}"><b>${i+1}</b> ${esc(o)}</button>`).join("")}</div>`}</div>
+  <div class="qfoot" id="qf">${q.type?'<button class="primary" id="chk">Check</button>':""}</div>`;
+  $("#qx").onclick=()=>{if(confirm("Quit this lesson?"))level(qz.l)};
+  if(q.say)$("#qs").onclick=()=>speak(q.say);
+  if(q.type){const inp=$("#qin");inp.focus();const go=()=>answer(inp.value.trim().toLowerCase()===q.w.w);inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();if(qz.st==="ask")go()}};$("#chk").onclick=go}
+  else app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.i===q.a,+b.dataset.i));
+  qz.st="ask";
+}
+function answer(ok,idx){
+  if(qz.st!=="ask")return;qz.st="done";
+  const q=qz.qs[qz.i];qz.seen++;
+  if(ok)qz.right++;else{qz.hearts--;if(!q.retry){const r=makeQ(q.w,qz.pool);r.retry=1;qz.qs.push(r)}}
+  app.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i===q.a)b.classList.add("right");else if(i===idx)b.classList.add("wrong")});
+  const inp=$("#qin");if(inp)inp.readOnly=true;
+  const ans=q.type?q.w.w:q.opts[q.a];
+  $("#qf").className="qfoot "+(ok?"fok":"fbad");
+  $("#qf").innerHTML=`<div class="fb"><b>${ok?"Correct!":"Correct answer: "+esc(ans)}</b><br><small>${esc(q.w.w)} — ${esc(q.w.d)}</small></div><button class="primary" id="nx">Continue</button>`;
+  $("#nx").onclick=qnext;$("#nx").focus();
+}
+function qnext(){qz.i++;qdraw()}
+document.addEventListener("keydown",e=>{
+  if(!qz||document.querySelector("dialog[open]"))return;
+  if(qz.st==="ask"&&/^[1-4]$/.test(e.key)&&document.activeElement.id!=="qin"){const b=app.querySelectorAll(".opt")[+e.key-1];if(b)b.click()}
+  else if(qz.st==="done"&&e.key==="Enter"&&document.activeElement.id!=="nx"){e.preventDefault();qnext()}
+});
+$("#homeBtn").onclick=()=>{qz=null;home()};
 home();
 </script>
 </body>
