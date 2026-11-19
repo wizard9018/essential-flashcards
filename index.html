@@ -154,7 +154,13 @@ function loginScreen(){
       const {data,error}=await sb.auth.signInWithPassword(c);if(error)return msg(error.message);enter(data.user.email,true)};
     $("#su").onclick=async()=>{const c=creds();if(!c.email||c.password.length<6)return msg("Enter an email and a password of 6+ characters.");msg("Creating account…");
       const {data,error}=await sb.auth.signUp(c);if(error)return msg(error.message);
-      if(data.session)enter(data.user.email,true);else msg("Account created. Check your email to confirm, then sign in.")};
+      if(data.session)return enter(data.user.email,true);
+      if(data.user&&data.user.identities&&data.user.identities.length===0){   // email already registered: Supabase sends no email
+        msg("This email is already registered. Signing you in…");
+        const r=await sb.auth.signInWithPassword(c);
+        if(r.error)return msg("This email is already registered — please use Sign in with your existing password.");
+        return enter(r.data.user.email,true)}
+      msg("Account created. Check your email to confirm, then sign in.")};
     $("#pw").onkeydown=e=>{if(e.key==="Enter")$("#si").click()};
   }
 }
