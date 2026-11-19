@@ -1,0 +1,1 @@
+window.SB_CFG={"url": "https://fclcyabifwllunfossid.supabase.co", "key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZjbGN5YWJpZndsbHVuZm9zc2lkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4NTU1MDEsImV4cCI6MjEwNzQzMTUwMX0.gZSqTIL28_fBwNoNa7sS1KWkVcAfelQALvzKLCFWWq8"};

@@ -72,12 +72,15 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .seg button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .cn{font-size:30px;font-weight:700;margin-bottom:12px}
 .srs{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:16px}
+.fld{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);width:100%}
 .hidden{display:none}
 </style>
 </head>
 <body>
-<header><h1 id="title">Essential Words Flashcards</h1><span id="streakBadge" class="badge2"></span><span id="userChip" class="badge2"></span><button id="homeBtn" class="hidden">Home</button></header>
+<header><h1 id="title">Essential Words Flashcards</h1><span id="streakBadge" class="badge2"></span><span id="userChip" class="badge2"></span><span id="syncChip" class="badge2" style="font-weight:400;font-size:12px;color:var(--mute)"></span><button id="homeBtn" class="hidden">Home</button></header>
 <main id="app"></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js?v=1"></script>
 <script src="deck.js?v=3"></script>
 <script src="cn.js?v=3"></script>
 <script>
@@ -85,26 +88,81 @@ const $=s=>document.querySelector(s), app=$("#app");
 let USER="";try{USER=localStorage.getItem("ef.user")||""}catch(e){}
 const P=k=>"ef."+USER+"."+k;
 const jget=(k,d)=>{try{return JSON.parse(localStorage.getItem(P(k))||"null")||d}catch(e){return d}};
-const jset=(k,v)=>{try{localStorage.setItem(P(k),JSON.stringify(v))}catch(e){}};
+const jset=(k,v)=>{try{lsSet(P(k),JSON.stringify(v))}catch(e){}};
+
+const sb=(window.supabase&&window.SB_CFG&&SB_CFG.url)?supabase.createClient(SB_CFG.url,SB_CFG.key):null;
+let SBMODE=false;try{SBMODE=!!sb&&localStorage.getItem("ef.sb")==="1"}catch(e){}
+let syncTimer=null,syncUid=null;
+function setSync(t){const e=document.getElementById("syncChip");if(e)e.textContent=t}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}if(SBMODE)scheduleSync()}
+function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(syncPush,2000);setSync("☁ …")}
+const snapshot=()=>({progress,quiz:qprog,wrong,days,chap,tests});
+function mergeState(a,b){   // a = remote, b = local (local wins plain conflicts)
+  const o={};
+  o.progress=Object.assign({},a.progress||{},b.progress||{});
+  o.quiz=Object.assign({},a.quiz||{});for(const k in (b.quiz||{}))o.quiz[k]=Math.max(o.quiz[k]||0,b.quiz[k]);
+  o.wrong=Object.assign({},a.wrong||{},b.wrong||{});
+  o.days=Object.assign({},a.days||{});for(const k in (b.days||{}))o.days[k]=Math.max(o.days[k]||0,b.days[k]);
+  o.chap=Object.assign({},a.chap||{});for(const k in (b.chap||{})){const x=o.chap[k],y=b.chap[k];
+    o.chap[k]=!x?y:((y.reviews.length>x.reviews.length||(y.reviews.length===x.reviews.length&&y.step>=x.step))?y:x)}
+  const seen=new Set(),ts=[];for(const t of [...(a.tests||[]),...(b.tests||[])]){const id=[t.k,t.d,t.pct,t.type].join("|");if(!seen.has(id)){seen.add(id);ts.push(t)}}
+  o.tests=ts;return o
+}
+function applyState(o){
+  progress=o.progress;qprog=o.quiz;wrong=o.wrong;days=o.days;chap=o.chap;tests=o.tests;
+  store.set(progress);qstore.set(qprog);wstore.set(wrong);dstore.set(days);saveChap();saveTests()
+}
+async function syncPush(){
+  if(!SBMODE||!syncUid)return;
+  const {error}=await sb.from("ef_state").upsert({user_id:syncUid,data:snapshot(),updated_at:new Date().toISOString()});
+  setSync(error?"☁ ✕ (retrying later)":"☁ synced");if(error)console.warn(error.message)
+}
+async function syncPull(){
+  setSync("☁ …");
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){logoutLocal();return}
+  syncUid=session.user.id;
+  const {data,error}=await sb.from("ef_state").select("data").eq("user_id",syncUid).maybeSingle();
+  if(error){setSync("☁ ✕ "+(/relation|schema|exist/i.test(error.message)?"table missing":"offline"));console.warn(error.message);return}
+  const merged=mergeState(data?data.data:{},snapshot());
+  const changed=JSON.stringify(merged)!==JSON.stringify(snapshot());
+  applyState(merged);await syncPush();
+  if(changed&&!st&&!qz){badge();home()}
+}
+function logoutLocal(){try{localStorage.removeItem("ef.user");localStorage.removeItem("ef.sb")}catch(e){}location.reload()}
 function loginScreen(){
   let users=[];try{users=JSON.parse(localStorage.getItem("ef.users")||"[]")}catch(e){}
   $("#title").textContent="Essential Words";
-  app.innerHTML=`<div class="qend"><h2>👋 Who's studying?</h2><p class="crumb">Each profile keeps its own progress, review plan and test records on this device.</p>
-  <div class="row" style="margin-bottom:16px">${users.map(u=>`<button class="primary" data-u="${esc0(u)}">${esc0(u)}</button>`).join("")}</div>
-  <div class="row"><input id="nm" placeholder="New name" maxlength="20" style="font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)"><button id="newu">Start</button></div></div>`;
-  const enter=n=>{n=n.trim();if(!n)return;if(!users.includes(n)){
-      // first profile adopts any pre-profile progress stored by the older version
+  app.innerHTML=`<div class="qend"><h2>👋 Welcome</h2>
+  ${sb?`<p class="crumb">Sign in to sync your progress across devices.</p>
+  <div style="display:grid;gap:10px;max-width:300px;margin:0 auto 10px"><input id="em" type="email" autocomplete="email" placeholder="Email" class="fld"><input id="pw" type="password" autocomplete="current-password" placeholder="Password (6+ characters)" class="fld">
+  <div class="row"><button class="primary" id="si">Sign in</button><button id="su">Create account</button></div><p id="msg" class="crumb" style="min-height:1.4em"></p></div>`:""}
+  <p class="crumb" style="margin-top:20px">Or study on this device only (no sync):</p>
+  <div class="row" style="margin-bottom:10px">${users.filter(u=>!u.includes("@")).map(u=>`<button data-u="${esc0(u)}">${esc0(u)}</button>`).join("")}</div>
+  <div class="row"><input id="nm" placeholder="New name" maxlength="20" class="fld" style="max-width:160px"><button id="newu">Start</button></div></div>`;
+  const enter=(n,cloud)=>{n=n.trim();if(!n)return;if(!users.includes(n)){
       if(!users.length)["progress","quiz","wrong","days"].forEach(k=>{const v=localStorage.getItem("ef."+k);if(v!=null)localStorage.setItem("ef."+n+"."+k,v)});
       users.push(n);localStorage.setItem("ef.users",JSON.stringify(users))}
-    localStorage.setItem("ef.user",n);localStorage.setItem("ef."+n+".lastLogin",dkeyNow());location.reload()};
-  app.querySelectorAll("[data-u]").forEach(b=>b.onclick=()=>enter(b.dataset.u));
-  $("#newu").onclick=()=>enter($("#nm").value);$("#nm").onkeydown=e=>{if(e.key==="Enter")enter($("#nm").value)};
+    localStorage.setItem("ef.user",n);if(cloud)localStorage.setItem("ef.sb","1");else localStorage.removeItem("ef.sb");
+    localStorage.setItem("ef."+n+".lastLogin",dkeyNow());location.reload()};
+  app.querySelectorAll("[data-u]").forEach(b=>b.onclick=()=>enter(b.dataset.u,false));
+  $("#newu").onclick=()=>enter($("#nm").value,false);$("#nm").onkeydown=e=>{if(e.key==="Enter")enter($("#nm").value,false)};
+  if(sb){
+    const msg=t=>$("#msg").textContent=t;
+    const creds=()=>({email:$("#em").value.trim(),password:$("#pw").value});
+    $("#si").onclick=async()=>{const c=creds();if(!c.email||!c.password)return msg("Enter email and password.");msg("Signing in…");
+      const {data,error}=await sb.auth.signInWithPassword(c);if(error)return msg(error.message);enter(data.user.email,true)};
+    $("#su").onclick=async()=>{const c=creds();if(!c.email||c.password.length<6)return msg("Enter an email and a password of 6+ characters.");msg("Creating account…");
+      const {data,error}=await sb.auth.signUp(c);if(error)return msg(error.message);
+      if(data.session)enter(data.user.email,true);else msg("Account created. Check your email to confirm, then sign in.")};
+    $("#pw").onkeydown=e=>{if(e.key==="Enter")$("#si").click()};
+  }
 }
 const dkeyNow=()=>{const x=new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
 const esc0=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function logout(){try{localStorage.removeItem("ef.user")}catch(e){}location.reload()}
+async function logout(){try{if(SBMODE)await sb.auth.signOut()}catch(e){}try{localStorage.removeItem("ef.user");localStorage.removeItem("ef.sb")}catch(e){}location.reload()}
 
-const store={get(){try{return JSON.parse(localStorage.getItem(P("progress"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("progress"),JSON.stringify(p))}catch(e){}}};
+const store={get(){try{return JSON.parse(localStorage.getItem(P("progress"))||"{}")}catch(e){return{}}},set(p){try{lsSet(P("progress"),JSON.stringify(p))}catch(e){}}};
 let progress=store.get();           // key "L.word" -> 1 known / 0 learning
 const key=(l,w)=>l+"."+w;
 const levels=[1,2,3,4,5,6];
@@ -115,7 +173,7 @@ let lang="both";try{lang=localStorage.getItem("ef.lang")||"both"}catch(e){}
 let st=null;
 
 
-const dstore={get(){try{return JSON.parse(localStorage.getItem(P("days"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("days"),JSON.stringify(p))}catch(e){}}};
+const dstore={get(){try{return JSON.parse(localStorage.getItem(P("days"))||"{}")}catch(e){return{}}},set(p){try{lsSet(P("days"),JSON.stringify(p))}catch(e){}}};
 let days=dstore.get();   // "YYYY-MM-DD" -> words practiced that day
 const dkey=d=>{const x=d||new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
 const dayShift=n=>{const d=new Date();d.setDate(d.getDate()+n);return d};
@@ -192,12 +250,12 @@ function home(){
   if($("#startRev"))$("#startRev").onclick=()=>startReview(dueList());
   $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);qprog={};qstore.set(qprog);wrong={};wstore.set(wrong);days={};dstore.set(days);chap={};saveChap();tests=[];saveTests();badge();home()}};
 }
-const qstore={get(){try{return JSON.parse(localStorage.getItem(P("quiz"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("quiz"),JSON.stringify(p))}catch(e){}}};
+const qstore={get(){try{return JSON.parse(localStorage.getItem(P("quiz"))||"{}")}catch(e){return{}}},set(p){try{lsSet(P("quiz"),JSON.stringify(p))}catch(e){}}};
 let qprog=qstore.get(); const stars=k=>qprog[k]||0;
 const starStr=n=>"★".repeat(n)+"☆".repeat(3-n);
 const COLORS=["#2f8f5b","#2f6fa8","#a85f2f","#8a4fa8","#b0384f"];
 function xpTotal(){return qprog.xp||0}
-const wstore={get(){try{return JSON.parse(localStorage.getItem(P("wrong"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("wrong"),JSON.stringify(p))}catch(e){}}};
+const wstore={get(){try{return JSON.parse(localStorage.getItem(P("wrong"))||"{}")}catch(e){return{}}},set(p){try{lsSet(P("wrong"),JSON.stringify(p))}catch(e){}}};
 let wrong=wstore.get();   // "L.word" -> consecutive correct answers since last miss; removed at 2
 const wrongWords=l=>unitsOf(l).flatMap(u=>u.words).filter(w=>(key(l,w.w) in wrong));
 function recordAnswer(l,w,ok){const k=key(l,w.w);if(!ok)wrong[k]=0;else if(k in wrong){wrong[k]++;if(wrong[k]>=2)delete wrong[k]}wstore.set(wrong)}
@@ -346,7 +404,7 @@ document.addEventListener("keydown",e=>{
   else if(qz.st==="done"&&e.key==="Enter"&&document.activeElement.id!=="nx"){e.preventDefault();qnext()}
 });
 $("#homeBtn").onclick=()=>{qz=null;home()};
-if(!USER)loginScreen();else{try{localStorage.setItem(P("lastLogin"),dkeyNow())}catch(e){}badge();home()}
+if(!USER)loginScreen();else{try{lsSet(P("lastLogin"),dkeyNow())}catch(e){}badge();home();if(SBMODE)syncPull()}
 </script>
 </body>
 </html>
