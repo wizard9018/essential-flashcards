@@ -61,11 +61,18 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .qfoot.fok{background:rgba(47,143,91,.18)}.qfoot.fbad{background:rgba(194,81,47,.18)}
 .fb small{color:var(--mute)}
 .qend{text-align:center;padding:40px 0}.bigstars{font-size:52px;color:#e0a82e;letter-spacing:6px}
+.badge2{font-weight:600;white-space:nowrap}
+.stats{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.stat b{display:block;font-size:24px}.stat small{color:var(--mute)}
+.chart{display:flex;align-items:flex-end;gap:5px;height:90px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin-bottom:6px}
+.chart div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-size:10px;color:var(--mute)}
+.chart i{display:block;width:100%;background:var(--ok);border-radius:3px 3px 0 0;min-height:2px;opacity:.9}
 .hidden{display:none}
 </style>
 </head>
 <body>
-<header><h1 id="title">Essential Words Flashcards</h1><button id="homeBtn" class="hidden">Home</button></header>
+<header><h1 id="title">Essential Words Flashcards</h1><span id="streakBadge" class="badge2"></span><button id="homeBtn" class="hidden">Home</button></header>
 <main id="app"></main>
 <script src="deck.js"></script>
 <script>
@@ -79,14 +86,43 @@ const known=ws=>ws.filter(w=>progress[key(w.l,w.w)]===1).length;
 DECK.forEach(u=>u.words.forEach(w=>w.l=u.level));
 let st=null;
 
+
+const dstore={get(){try{return JSON.parse(localStorage.getItem("ef.days")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.days",JSON.stringify(p))}catch(e){}}};
+let days=dstore.get();   // "YYYY-MM-DD" -> words practiced that day
+const dkey=d=>{const x=d||new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
+const dayShift=n=>{const d=new Date();d.setDate(d.getDate()+n);return d};
+function touchDay(){const k=dkey();days[k]=(days[k]||0)+1;dstore.set(days);badge()}
+function streaks(){
+  let cur=0,i=days[dkey()]?0:-1;           // today not yet studied: streak still alive through yesterday
+  while(days[dkey(dayShift(i))]){cur++;i--}
+  const ks=Object.keys(days).sort();let best=0,run=0,prev=null;
+  for(const k of ks){const d=new Date(k+"T00:00:00");run=prev&&Math.round((d-prev)/864e5)===1?run+1:1;best=Math.max(best,run);prev=d}
+  return{cur,best,today:!!days[dkey()]}
+}
+function badge(){const s=streaks();$("#streakBadge").textContent=(s.cur?"🔥 "+s.cur:"")}
+function statsHtml(){
+  const s=streaks(),all=DECK.flatMap(u=>u.words);
+  const chapters=DECK.filter(u=>stars(u.level+"."+u.unit)).length;
+  const starSum=Object.keys(qprog).filter(k=>k!=="xp").reduce((a,k)=>a+qprog[k],0);
+  let bars="",mx=Math.max(1,...Array.from({length:14},(_,j)=>days[dkey(dayShift(j-13))]||0));
+  for(let j=0;j<14;j++){const d=dayShift(j-13),n=days[dkey(d)]||0;bars+=`<div title="${dkey(d)}: ${n} answers"><i style="height:${100*n/mx*.7}%"></i>${d.getDate()}</div>`}
+  return `<div class="stats">
+   <div class="stat"><b>🔥 ${s.cur}</b><small>day streak${s.cur&&!s.today?" (study today to keep it!)":""}</small></div>
+   <div class="stat"><b>🏅 ${s.best}</b><small>best streak</small></div>
+   <div class="stat"><b>⚡ ${xpTotal()}</b><small>XP</small></div>
+   <div class="stat"><b>${known(all)}</b><small>of ${all.length} words known</small></div>
+   <div class="stat"><b>${chapters}</b><small>of 180 chapters done</small></div>
+   <div class="stat"><b>★ ${starSum}</b><small>stars</small></div>
+  </div><div class="chart">${bars}</div><p class="crumb" style="font-size:12px;margin:0 0 20px">Last 14 days · answers per day</p>`
+}
 function home(){
   st=null; $("#homeBtn").classList.add("hidden"); $("#title").textContent="Essential Words Flashcards";
-  app.innerHTML="<p class='crumb'>Pick a level. 30 units × 20 words each.</p><div class='grid'>"+levels.map(l=>{
+  app.innerHTML=statsHtml()+"<p class='crumb'>Pick a level. 30 chapters × 20 words each.</p><div class='grid'>"+levels.map(l=>{
     const ws=unitsOf(l).flatMap(u=>u.words);const k=known(ws);
     return `<button class="tile" data-l="${l}"><b>Level ${l}</b><small>${k} / ${ws.length} known</small><div class="bar"><i style="width:${100*k/ws.length}%"></i></div></button>`}).join("")+"</div>"+
     "<p style='margin-top:28px'><button id='reset'>Reset all progress</button></p>";
   app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>level(+b.dataset.l));
-  $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);home()}};
+  $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);qprog={};qstore.set(qprog);wrong={};wstore.set(wrong);days={};dstore.set(days);badge();home()}};
 }
 const qstore={get(){try{return JSON.parse(localStorage.getItem("ef.quiz")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.quiz",JSON.stringify(p))}catch(e){}}};
 let qprog=qstore.get(); const stars=k=>qprog[k]||0;
@@ -179,7 +215,7 @@ function draw(){
   $("#yes").onclick=()=>mark(1);$("#no").onclick=()=>mark(0);
 }
 function go(d){st.i=Math.max(0,st.i+d);st.flip=false;draw()}
-function mark(v){const w=st.ws[st.i];progress[key(st.l,w.w)]=v;store.set(progress);go(1)}
+function mark(v){touchDay();const w=st.ws[st.i];progress[key(st.l,w.w)]=v;store.set(progress);go(1)}
 document.addEventListener("keydown",e=>{
   if(!st||st.i>=st.ws.length)return;
   if(e.key===" "||e.key==="ArrowUp"||e.key==="ArrowDown"){e.preventDefault();st.flip=!st.flip;$("#card").classList.toggle("flip")}
@@ -231,7 +267,7 @@ function qdraw(){
 function answer(ok,idx){
   if(qz.st!=="ask")return;qz.st="done";
   const q=qz.qs[qz.i];qz.seen++;
-  recordAnswer(qz.l,q.w,ok);
+  touchDay();recordAnswer(qz.l,q.w,ok);
   if(ok)qz.right++;else{qz.hearts--;if(!q.retry){const r=makeQ(q.w,qz.pool);r.retry=1;qz.qs.push(r)}}
   app.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i===q.a)b.classList.add("right");else if(i===idx)b.classList.add("wrong")});
   const inp=$("#qin");if(inp)inp.readOnly=true;
@@ -247,7 +283,7 @@ document.addEventListener("keydown",e=>{
   else if(qz.st==="done"&&e.key==="Enter"&&document.activeElement.id!=="nx"){e.preventDefault();qnext()}
 });
 $("#homeBtn").onclick=()=>{qz=null;home()};
-home();
+badge();home();
 </script>
 </body>
 </html>
