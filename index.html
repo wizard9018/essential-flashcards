@@ -175,7 +175,7 @@ const levels=[1,2,3,4,5,6];
 const unitsOf=l=>DECK.filter(u=>u.level===l);
 const known=ws=>ws.filter(w=>progress[key(w.l,w.w)]===1).length;
 DECK.forEach(u=>u.words.forEach(w=>{w.l=u.level;w.cn=(window.CN&&CN[u.level+"."+u.unit]||{})[w.w]||""}));
-let lang="both";try{lang=localStorage.getItem("ef.lang")||"both"}catch(e){}
+let lang="en";try{lang=localStorage.getItem("ef.lang")||"en"}catch(e){}
 let st=null;
 
 
