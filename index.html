@@ -78,8 +78,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 <body>
 <header><h1 id="title">Essential Words Flashcards</h1><span id="streakBadge" class="badge2"></span><span id="userChip" class="badge2"></span><button id="homeBtn" class="hidden">Home</button></header>
 <main id="app"></main>
-<script src="deck.js"></script>
-<script src="cn.js"></script>
+<script src="deck.js?v=3"></script>
+<script src="cn.js?v=3"></script>
 <script>
 const $=s=>document.querySelector(s), app=$("#app");
 let USER="";try{USER=localStorage.getItem("ef.user")||""}catch(e){}
@@ -350,4 +350,5 @@ if(!USER)loginScreen();else{try{localStorage.setItem(P("lastLogin"),dkeyNow())}c
 </script>
 </body>
 </html>
+
 
