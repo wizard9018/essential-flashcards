@@ -56,7 +56,6 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .opt{text-align:left;padding:14px;border-width:2px;border-bottom-width:4px;font-size:17px}
 .opt b{display:inline-block;width:26px;color:var(--mute)}
 .opt.right{border-color:var(--ok);background:rgba(47,143,91,.15)}.opt.wrong{border-color:var(--bad);background:rgba(194,81,47,.15)}
-#qin{width:100%;font:inherit;font-size:20px;padding:14px;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
 .qfoot{position:sticky;bottom:0;padding:14px 16px;margin:0 -16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .qfoot.fok{background:rgba(47,143,91,.18)}.qfoot.fbad{background:rgba(194,81,47,.18)}
 .fb small{color:var(--mute)}
@@ -73,6 +72,11 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .cn{font-size:30px;font-weight:700;margin-bottom:12px}
 .srs{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:16px}
 .fld{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);width:100%}
+.cgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.fc{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px;min-height:150px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;text-align:center}
+.fc .w{font-size:24px;font-weight:700}.fc .p{color:var(--mute);font-style:italic;font-size:13px}
+.fc .bk{display:none;text-align:left}.fc.flip{border-color:var(--accent);justify-content:flex-start}.fc.flip .ft{display:none}.fc.flip .bk{display:block}
+.fc .spk{top:6px;right:6px;padding:2px 7px;font-size:13px}
 .hidden{display:none}
 </style>
 </head>
@@ -227,7 +231,7 @@ function startReview(keys){
 function nextReview(){
   const k=reviewQueue.shift();if(!k){home();return}
   const [l,n]=k.split(".").map(Number),u=unitsOf(l).find(x=>x.unit===n);
-  startQuiz(l,u.words,"Review · L"+l+" Ch."+n,null,k)
+  startQuiz(l,()=>sample(bank(l,n),10),"Review · L"+l+" Ch."+n,null,k)
 }
 function scheduleHtml(){
   const due=dueList(),t=dkey();
@@ -272,7 +276,7 @@ function mistakes(l){
   document.body.appendChild(d);d.showModal();d.onclose=()=>d.remove();
   d.querySelector("#dx").onclick=()=>d.close();
   if(!ws.length)return;
-  d.querySelector("#mq").onclick=()=>{d.close();startQuiz(l,shuffle(ws).slice(0,20),"Mistakes",null)};
+  d.querySelector("#mq").onclick=()=>{d.close();startQuiz(l,()=>{const bs=unitsOf(l).flatMap(u=>bank(l,u.unit)).filter(q=>(key(l,q.w.w) in wrong));return sample(bs.length?bs:unitsOf(l).flatMap(u=>bank(l,u.unit)),10)},"Mistakes",null)};
   d.querySelector("#mc").onclick=()=>{d.close();study(l,ws,"Level "+l+" · mistakes",true)};
   d.querySelector("#mcl").onclick=()=>{if(confirm("Clear the mistakes list for this level?")){ws.forEach(w=>delete wrong[key(l,w.w)]);wstore.set(wrong);d.close();level(l)}};
 }
@@ -289,19 +293,32 @@ function level(l){
     h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c};${pos(6)}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
   }
   app.innerHTML=h;
-  app.querySelectorAll(".node").forEach(b=>b.onclick=()=>{if(b.dataset.r){const r=+b.dataset.r;startQuiz(l,shuffle(unitsOf(l).filter(u=>u.unit>(r-1)*6&&u.unit<=r*6).flatMap(u=>u.words)).slice(0,20),"Unit "+r+" test",l+".r"+r)}else{const n=+b.dataset.n;study(l,unitsOf(l).find(u=>u.unit===n).words,"Level "+l+" · Chapter "+n,false,n)}});
+  app.querySelectorAll(".node").forEach(b=>b.onclick=()=>{if(b.dataset.r){const r=+b.dataset.r;startQuiz(l,()=>sample(unitBank(l,r),10),"Unit "+r+" test",l+".r"+r)}else{const n=+b.dataset.n;cards(l,n)}});
   $("#mist").onclick=()=>mistakes(l);
   $("#all").onclick=()=>study(l,us.flatMap(u=>u.words),"Level "+l+" · all",true);
   $("#weak").onclick=()=>{const ws=us.flatMap(u=>u.words).filter(w=>progress[key(l,w.w)]===0);ws.length?study(l,ws,"Level "+l+" · learning",true):alert("No words marked as 'still learning' yet.")};
 }
-function unit(l,n){
-  const u=DECK.find(x=>x.level===l&&x.unit===n);
-  $("#homeBtn").classList.remove("hidden");
-  app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Chapter ${n}</p><div class="row" style="justify-content:flex-start"><button class="primary" id="go">Start flashcards</button><button id="shuf">Shuffled</button></div>
-  <table class="list"><tr><th>Word</th><th>Meaning</th></tr>${u.words.map(w=>`<tr><td><b>${w.w}</b>${w.pos?` <i style="color:var(--mute)">${w.pos}.</i>`:""}${progress[key(l,w.w)]===1?" ✓":""}</td><td>${w.d}</td></tr>`).join("")}</table>`;
-  $("#back").onclick=e=>{e.preventDefault();level(l)};
-  $("#go").onclick=()=>study(l,u.words,"Level "+l+" · Chapter "+n,false,n);
-  $("#shuf").onclick=()=>study(l,u.words,"Level "+l+" · Chapter "+n,true,n);
+let flipped=new Set();
+function cards(l,n){
+  const u=unitsOf(l).find(x=>x.unit===n);flipped=new Set();
+  $("#homeBtn").classList.remove("hidden");$("#title").textContent="Level "+l+" · Chapter "+n;st=null;qz=null;
+  const render=()=>{
+    const learned=!!chap[l+"."+n];
+    app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Chapter ${n} · 20 words — tap a card to flip it</p>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="seg">${[["en","English"],["zh","中文"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span><span><button id="flipall">Flip all</button> <button id="onebyone">One by one</button></span></div>
+    <div class="cgrid">${u.words.map((w,i)=>`<div class="fc ${flipped.has(i)?"flip":""}" data-i="${i}"><button class="spk" data-say="${i}" title="Pronounce">🔊</button>
+      <div class="ft"><div class="w">${esc(w.w)}</div><div class="p">${w.pos?w.pos+".":""}</div></div>
+      <div class="bk"><div class="w" style="font-size:18px">${esc(w.w)} <span class="p">${w.pos?w.pos+".":""}</span></div>${lang!=="en"?`<div class="cn" style="font-size:20px;margin:6px 0">${w.cn?esc(w.cn):""}</div>`:""}${lang!=="zh"?`<div class="def" style="font-size:15px">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex" style="font-size:13px;margin-top:6px">${hl(w.e,w.w)}</div>`:""}</div></div>`).join("")}</div>
+    <div class="row" style="margin-top:20px"><button id="learned" class="${learned?"ok":""}">${learned?"✅ Learned · next review "+chap[l+"."+n].due:"✅ Mark chapter as learned"}</button><button class="primary" id="test">📝 Take the test (10 questions)</button></div>`;
+    $("#back").onclick=e=>{e.preventDefault();level(l)};
+    app.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;try{localStorage.setItem("ef.lang",lang)}catch(e){}render()});
+    app.querySelectorAll(".fc").forEach(c=>c.onclick=e=>{const i=+c.dataset.i;if(e.target.closest(".spk")){speak(u.words[+e.target.closest(".spk").dataset.say].w);return}flipped.has(i)?flipped.delete(i):flipped.add(i);c.classList.toggle("flip")});
+    $("#flipall").onclick=()=>{if(flipped.size<u.words.length)u.words.forEach((_,i)=>flipped.add(i));else flipped.clear();render()};
+    $("#onebyone").onclick=()=>study(l,u.words,"Level "+l+" · Chapter "+n,false,n);
+    $("#learned").onclick=()=>{markLearned(l,n);touchDay();render()};
+    $("#test").onclick=()=>startQuiz(l,()=>sample(bank(l,n),10),"Chapter "+n,l+"."+n);
+  };
+  render()
 }
 const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function hl(text,word){
@@ -320,7 +337,7 @@ function draw(){
     const k=known(ws);
     const fresh=st.unitNo&&markLearned(l,st.unitNo);
     app.innerHTML=`<h2>Done 🎉</h2>${st.unitNo?`<p>✅ Chapter ${st.unitNo} marked as learned.${fresh?" First review: "+chap[l+"."+st.unitNo].due+".":""}</p>`:""}<p>${k} of ${ws.length} marked as known.</p><div class="row">${st.unitNo?'<button class="primary" id="test">📝 Take the test</button>':""}<button id="again">Again</button><button id="weak2">Only the ones still learning</button><button id="lv">Back to level</button></div>`;
-    if(st.unitNo)$("#test").onclick=()=>startQuiz(l,st.all,"Chapter "+st.unitNo,l+"."+st.unitNo);
+    if(st.unitNo)$("#test").onclick=()=>startQuiz(l,()=>sample(bank(l,st.unitNo),10),"Chapter "+st.unitNo,l+"."+st.unitNo);
     $("#again").onclick=()=>study(l,ws,st.label,true,st.unitNo);
     $("#weak2").onclick=()=>{const w=ws.filter(x=>progress[key(l,x.w)]!==1);w.length?study(l,w,st.label,true,st.unitNo):alert("Everything here is marked as known!")};
     $("#lv").onclick=()=>level(l);return}
@@ -350,27 +367,40 @@ document.addEventListener("keydown",e=>{
 let qz=null;
 const stemOf=w=>{const x=w.length>4?w.slice(0,Math.max(3,w.length-2)):w;return x.replace(/[^a-z]/g,"")};
 const mask=(t,w)=>t.replace(new RegExp("\\b"+stemOf(w)+"[a-z]*","ig"),"_____");
-function pick(w,pool,n){
-  const same=shuffle(pool.filter(p=>p.w!==w.w&&p.pos===w.pos)),oth=shuffle(pool.filter(p=>p.w!==w.w&&p.pos!==w.pos));
-  return same.concat(oth).slice(0,n);
+function seeded(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}let a=h>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function shufR(a,r){a=a.slice();for(let i=a.length-1;i>0;i--){const j=r()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function mkQ(w,t,pool,r){
+  const ds=shufR(pool.filter(p=>p.w!==w.w&&p.pos===w.pos),r).concat(shufR(pool.filter(p=>p.w!==w.w&&p.pos!==w.pos),r)).slice(0,3);
+  const o=shufR([w,...ds],r),a=o.indexOf(w);
+  if(t==="meaning")return{w,t,p:w.w,sub:"What does it mean?",say:w.w,opts:o.map(x=>x.d),a};
+  if(t==="word"){const md=mask(w.d,w.w);return md===w.d?null:{w,t,p:md,sub:"Which word fits this meaning?",opts:o.map(x=>x.w),a}}
+  if(t==="blank"){const me=w.e?mask(w.e,w.w):"";return(!me||me===w.e)?null:{w,t,p:me,sub:"Fill in the blank",opts:o.map(x=>x.w),a}}
+  if(t==="zhA")return (o.every(x=>x.cn)&&new Set(o.map(x=>x.cn)).size===4)?{w,t,p:w.w,sub:"选择正确的中文意思",say:w.w,opts:o.map(x=>x.cn),a}:null;
+  if(t==="zhB")return (o.every(x=>x.cn)&&new Set(o.map(x=>x.cn)).size===4)?{w,t,p:w.cn,sub:"Which English word matches?",opts:o.map(x=>x.w),a}:null;
+  return null
 }
-function makeQ(w,pool){
-  const md=mask(w.d,w.w),me=w.e?mask(w.e,w.w):"";
-  const types=["meaning","meaning","word","blank","blank","type"].filter(t=>t==="meaning"||(t==="word"&&md!==w.d)||(t==="blank"&&me&&me!==w.e)||(t==="type"&&md!==w.d));
-  const t=types[Math.random()*types.length|0],ds=pick(w,pool,3);
-  if(t==="meaning"){const o=shuffle([w,...ds]);return{w,t,p:w.w,sub:"What does it mean?",say:w.w,opts:o.map(x=>x.d),a:o.indexOf(w)}}
-  if(t==="word"){const o=shuffle([w,...ds]);return{w,t,p:md,sub:"Which word fits this meaning?",opts:o.map(x=>x.w),a:o.indexOf(w)}}
-  if(t==="blank"){const o=shuffle([w,...ds]);return{w,t,p:me,sub:"Fill in the blank",opts:o.map(x=>x.w),a:o.indexOf(w)}}
-  return{w,t,p:md,sub:"Type the word",type:true}
+const bankCache={};
+function bank(l,n){      // 30 fixed multiple-choice questions per chapter (same every time)
+  const k=l+"."+n;if(bankCache[k])return bankCache[k];
+  const r=seeded("ef"+k),u=unitsOf(l).find(x=>x.unit===n),pool=unitsOf(l).flatMap(x=>x.words);
+  const T=["meaning","word","blank","zhA","zhB"],order=shufR(u.words,r),qs=[];
+  order.forEach((w,i)=>qs.push(mkQ(w,T[i%5],pool,r)||mkQ(w,"meaning",pool,r)));
+  order.slice(0,10).forEach((w,i)=>qs.push(mkQ(w,T[(i+2)%5],pool,r)||mkQ(w,"word",pool,r)||mkQ(w,"meaning",pool,r)));
+  return bankCache[k]=qs
 }
-function startQuiz(l,ws,label,k,rev){
-  const pool=unitsOf(l).flatMap(u=>u.words);
-  st=null;qz={l,k,label,rev,pool,words:ws,qs:shuffle(ws).map(w=>makeQ(w,pool)),i:0,hearts:5,right:0,seen:0,st:"ask"};
+function sample(qs,n){      // n random questions, different words first
+  const seen=new Set(),first=[],rest=[];
+  for(const q of shuffle(qs)){if(!seen.has(q.w.w)){seen.add(q.w.w);first.push(q)}else rest.push(q)}
+  return first.concat(rest).slice(0,n).map(q=>({...q}))
+}
+const unitBank=(l,r)=>unitsOf(l).filter(u=>u.unit>(r-1)*6&&u.unit<=r*6).flatMap(u=>bank(l,u.unit));
+function startQuiz(l,gen,label,k,rev){
+  st=null;qz={l,k,label,rev,gen,qs:gen(),i:0,hearts:5,right:0,seen:0,st:"ask"};
   $("#homeBtn").classList.remove("hidden");$("#title").textContent=label;qdraw();
 }
 function qdraw(){
   const q=qz.qs[qz.i];
-  if(qz.hearts<=0){app.innerHTML=`<div class="qend"><h2>Out of hearts 💔</h2><p>Review the words and try again.</p><div class="row"><button class="primary" id="r1">Try again</button><button id="r2">Back</button></div></div>`;$("#r1").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k,qz.rev);$("#r2").onclick=()=>qz.rev?home():level(qz.l);return}
+  if(qz.hearts<=0){app.innerHTML=`<div class="qend"><h2>Out of hearts 💔</h2><p>Review the words and try again.</p><div class="row"><button class="primary" id="r1">Try again</button><button id="r2">Back</button></div></div>`;$("#r1").onclick=()=>startQuiz(qz.l,qz.gen,qz.label,qz.k,qz.rev);$("#r2").onclick=()=>qz.rev?home():level(qz.l);return}
   if(!q){
     const acc=qz.right/qz.seen,s=acc>=.9?3:acc>=.7?2:1,xp=qz.right*10+(s===3?20:0);
     if(qz.k)qprog[qz.k]=Math.max(stars(qz.k),s);qprog.xp=xpTotal()+xp;qstore.set(qprog);
@@ -379,26 +409,24 @@ function qdraw(){
     else if(qz.k){tests.push({k:qz.k,d:dkey(),pct:Math.round(acc*100),type:"test"});if(/^\d+\.\d+$/.test(qz.k)&&!chap[qz.k]&&acc>=.7){markLearned(...qz.k.split(".").map(Number));note="Chapter marked as learned; first review "+chap[qz.k].due+"."}}
     saveTests();
     app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p>${note?`<p class="crumb">${note}</p>`:""}<div class="row"><button class="primary" id="r1">${qz.rev&&reviewQueue.length?"Next review ("+reviewQueue.length+" left)":"Continue"}</button>${qz.rev?"":'<button id="r2">Again</button>'}</div></div>`;
-    $("#r1").onclick=()=>qz.rev?nextReview():level(qz.l);if($("#r2"))$("#r2").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);return}
+    $("#r1").onclick=()=>qz.rev?nextReview():level(qz.l);if($("#r2"))$("#r2").onclick=()=>startQuiz(qz.l,qz.gen,qz.label,qz.k);return}
   const pr=100*qz.i/qz.qs.length;
   app.innerHTML=`<div class="qtop"><button id="qx" title="Quit">✕</button><div class="qbar"><i style="width:${pr}%"></i></div><span>❤️ ${qz.hearts}</span></div>
-  <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp ${q.t==="meaning"?"big":""}">${esc(q.p)} ${q.say?'<button class="spk2" id="qs">🔊</button>':""}</div>
-  ${q.type?`<input id="qin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type here…">`:`<div class="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}"><b>${i+1}</b> ${esc(o)}</button>`).join("")}</div>`}</div>
-  <div class="qfoot" id="qf">${q.type?'<button class="primary" id="chk">Check</button>':""}</div>`;
+  <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp ${q.t==="meaning"||q.t==="zhA"||q.t==="zhB"?"big":""}">${esc(q.p)} ${q.say?'<button class="spk2" id="qs">🔊</button>':""}</div>
+  <div class="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}"><b>${i+1}</b> ${esc(o)}</button>`).join("")}</div></div>
+  <div class="qfoot" id="qf"></div>`;
   $("#qx").onclick=()=>{if(confirm("Quit this lesson?"))level(qz.l)};
   if(q.say)$("#qs").onclick=()=>speak(q.say);
-  if(q.type){const inp=$("#qin");inp.focus();const go=()=>answer(inp.value.trim().toLowerCase()===q.w.w);inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();if(qz.st==="ask")go()}};$("#chk").onclick=go}
-  else app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.i===q.a,+b.dataset.i));
+  app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.i===q.a,+b.dataset.i));
   qz.st="ask";
 }
 function answer(ok,idx){
   if(qz.st!=="ask")return;qz.st="done";
   const q=qz.qs[qz.i];qz.seen++;
   touchDay();recordAnswer(qz.l,q.w,ok);
-  if(ok)qz.right++;else{qz.hearts--;if(!q.retry){const r=makeQ(q.w,qz.pool);r.retry=1;qz.qs.push(r)}}
+  if(ok)qz.right++;else{qz.hearts--;if(!q.retry){qz.qs.push({...q,retry:1})}}
   app.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i===q.a)b.classList.add("right");else if(i===idx)b.classList.add("wrong")});
-  const inp=$("#qin");if(inp)inp.readOnly=true;
-  const ans=q.type?q.w.w:q.opts[q.a];
+  const ans=q.opts[q.a];
   $("#qf").className="qfoot "+(ok?"fok":"fbad");
   $("#qf").innerHTML=`<div class="fb"><b>${ok?"Correct!":"Correct answer: "+esc(ans)}</b><br><small>${esc(q.w.w)} — ${esc(q.w.d)}</small></div><button class="primary" id="nx">Continue</button>`;
   $("#nx").onclick=qnext;$("#nx").focus();
@@ -406,7 +434,7 @@ function answer(ok,idx){
 function qnext(){qz.i++;qdraw()}
 document.addEventListener("keydown",e=>{
   if(!qz||document.querySelector("dialog[open]"))return;
-  if(qz.st==="ask"&&/^[1-4]$/.test(e.key)&&document.activeElement.id!=="qin"){const b=app.querySelectorAll(".opt")[+e.key-1];if(b)b.click()}
+  if(qz.st==="ask"&&/^[1-4]$/.test(e.key)){const b=app.querySelectorAll(".opt")[+e.key-1];if(b)b.click()}
   else if(qz.st==="done"&&e.key==="Enter"&&document.activeElement.id!=="nx"){e.preventDefault();qnext()}
 });
 $("#homeBtn").onclick=()=>{qz=null;home()};
@@ -414,5 +442,6 @@ if(!USER)loginScreen();else{try{lsSet(P("lastLogin"),dkeyNow())}catch(e){}badge(
 </script>
 </body>
 </html>
+
 
 
