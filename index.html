@@ -77,6 +77,13 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .fc .w{font-size:24px;font-weight:700}.fc .p{color:var(--mute);font-style:italic;font-size:13px}
 .fc .bk{display:none;text-align:left}.fc.flip{border-color:var(--accent);justify-content:flex-start}.fc.flip .ft{display:none}.fc.flip .bk{display:block}
 .fc .spk{top:6px;right:6px;padding:2px 7px;font-size:13px}
+.rv{background:var(--card);border:1px solid var(--line);border-left-width:5px;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.rvok{border-left-color:var(--ok)}.rvbad{border-left-color:var(--bad)}
+.rvp{font-size:18px;font-weight:600;margin:4px 0 8px}
+.rvo{padding:6px 10px;border-radius:8px;margin-bottom:4px;font-size:15px}
+.rvo.right{background:rgba(47,143,91,.15)}.rvo.wrong{background:rgba(194,81,47,.15)}
+.rve mark{background:none;color:var(--accent);font-weight:700}
+.rve{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:14px}
 .hidden{display:none}
 </style>
 </head>
@@ -395,8 +402,21 @@ function sample(qs,n){      // n random questions, different words first
 }
 const unitBank=(l,r)=>unitsOf(l).filter(u=>u.unit>(r-1)*6&&u.unit<=r*6).flatMap(u=>bank(l,u.unit));
 function startQuiz(l,gen,label,k,rev){
-  st=null;qz={l,k,label,rev,gen,qs:gen(),i:0,hearts:5,right:0,seen:0,st:"ask"};
+  st=null;qz={l,k,label,rev,gen,qs:gen(),log:[],i:0,hearts:5,right:0,seen:0,st:"ask"};
   $("#homeBtn").classList.remove("hidden");$("#title").textContent=label;qdraw();
+}
+function qresults(){
+  const {s,xp,note}=qz.res;
+  app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p>${note?`<p class="crumb">${note}</p>`:""}<div class="row"><button class="primary" id="r1">${qz.rev&&reviewQueue.length?"Next review ("+reviewQueue.length+" left)":"Continue"}</button><button id="rv">📋 Review answers</button>${qz.rev?"":'<button id="r2">Again</button>'}</div></div>`;
+  $("#r1").onclick=()=>qz.rev?nextReview():level(qz.l);$("#rv").onclick=qanswers;if($("#r2"))$("#r2").onclick=()=>startQuiz(qz.l,qz.gen,qz.label,qz.k);
+}
+function qanswers(){
+  const L=qz.log||[];
+  app.innerHTML=`<p class="crumb"><a href="#" id="bk">← Back to results</a> · ${L.filter(x=>x.ok).length} / ${L.length} correct on the first try</p>`+L.map((x,i)=>{const q=x.q,w=q.w;
+    return `<div class="rv ${x.ok?"rvok":"rvbad"}"><div class="rvh"><b>${i+1}.</b> <span style="color:var(--mute)">${esc(q.sub)}</span> ${x.ok?"✅":"❌"}</div><div class="rvp">${esc(q.p)}</div>
+    ${q.opts.map((o,j)=>`<div class="rvo ${j===q.a?"right":j===x.pick?"wrong":""}">${j===q.a?"✓":j===x.pick?"✗":"·"} ${esc(o)}${j===x.pick&&j!==q.a?" <small>(your answer)</small>":""}</div>`).join("")}
+    <div class="rve"><b>${esc(w.w)}</b>${w.pos?` <i>${w.pos}.</i>`:""}${w.cn?` — ${esc(w.cn)}`:""}<br>${hl(w.d,w.w)}${w.e?`<br><i style="color:var(--mute)">${hl(w.e,w.w)}</i>`:""}</div></div>`}).join("")+`<div class="row" style="margin-top:14px"><button class="primary" id="bk2">Back to results</button></div>`;
+  $("#bk").onclick=e=>{e.preventDefault();qresults()};$("#bk2").onclick=qresults;window.scrollTo(0,0)
 }
 function qdraw(){
   const q=qz.qs[qz.i];
@@ -408,8 +428,7 @@ function qdraw(){
     if(qz.rev){const ok=reviewResult(qz.rev,acc);tests.push({k:qz.rev,d:dkey(),pct:Math.round(acc*100),type:"review"});note=ok?"Review passed — next one on "+chap[qz.rev].due+".":"Below 70% — this chapter restarts the schedule (review again tomorrow)."}
     else if(qz.k){tests.push({k:qz.k,d:dkey(),pct:Math.round(acc*100),type:"test"});if(/^\d+\.\d+$/.test(qz.k)&&!chap[qz.k]&&acc>=.7){markLearned(...qz.k.split(".").map(Number));note="Chapter marked as learned; first review "+chap[qz.k].due+"."}}
     saveTests();
-    app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p>${note?`<p class="crumb">${note}</p>`:""}<div class="row"><button class="primary" id="r1">${qz.rev&&reviewQueue.length?"Next review ("+reviewQueue.length+" left)":"Continue"}</button>${qz.rev?"":'<button id="r2">Again</button>'}</div></div>`;
-    $("#r1").onclick=()=>qz.rev?nextReview():level(qz.l);if($("#r2"))$("#r2").onclick=()=>startQuiz(qz.l,qz.gen,qz.label,qz.k);return}
+    qz.res={s,xp,note};qresults();return}
   const pr=100*qz.i/qz.qs.length;
   app.innerHTML=`<div class="qtop"><button id="qx" title="Quit">✕</button><div class="qbar"><i style="width:${pr}%"></i></div><span>❤️ ${qz.hearts}</span></div>
   <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp ${q.t==="meaning"||q.t==="zhA"||q.t==="zhB"?"big":""}">${esc(q.p)} ${q.say?'<button class="spk2" id="qs">🔊</button>':""}</div>
@@ -424,6 +443,7 @@ function answer(ok,idx){
   if(qz.st!=="ask")return;qz.st="done";
   const q=qz.qs[qz.i];qz.seen++;
   touchDay();recordAnswer(qz.l,q.w,ok);
+  if(!q.retry)qz.log.push({q,pick:idx,ok});
   if(ok)qz.right++;else{qz.hearts--;if(!q.retry){qz.qs.push({...q,retry:1})}}
   app.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i===q.a)b.classList.add("right");else if(i===idx)b.classList.add("wrong")});
   const ans=q.opts[q.a];
