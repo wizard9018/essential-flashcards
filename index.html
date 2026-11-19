@@ -39,8 +39,9 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
 .list td,.list th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 .list{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
 .ubanner{display:flex;justify-content:space-between;color:#fff;padding:12px 16px;border-radius:12px;margin:22px 0 14px}
-.path{display:flex;flex-direction:column;align-items:center;gap:12px}
-.node{width:76px;height:76px;border-radius:50%;background:var(--c);color:#fff;border:0;border-bottom:6px solid rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;padding:0}
+.snake{position:relative;width:276px;height:276px;margin:0 auto}
+.snake svg{position:absolute;inset:0}
+.node{position:absolute;transform:translate(-50%,-50%);width:76px;height:76px;border-radius:50%;background:var(--c);color:#fff;border:0;border-bottom:6px solid rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;padding:0}
 .node span{font-size:24px;font-weight:700}.node small{font-size:10px;letter-spacing:1px}
 .node.done{box-shadow:0 0 0 4px var(--bg),0 0 0 7px var(--c)}
 .node.review{border-radius:22px}
@@ -113,10 +114,11 @@ function level(l){
   let h=`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to quiz or study</p><div class="row" style="justify-content:flex-start;margin-bottom:6px"><button id="all">Flashcards: whole level</button><button id="weak">Flashcards: still learning</button><button id="mist">📕 Mistakes (${wrongWords(l).length})</button></div>`;
   for(let g=0;g<5;g++){
     const c=COLORS[g];
-    h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="path">`;
-    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${stars(k)?"done":""}" style="--c:${c};margin-left:${[0,44,70,44,0,-44][j]}px" data-n="${n}"><span>${n}</span><small>${stars(k)?starStr(stars(k)):"START"}</small></button>`}
+    h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="snake"><svg viewBox="0 0 276 276" width="276" height="276"><path d="M46 46H230A46 46 0 0 1 230 138H46V230" fill="none" stroke="${c}" stroke-opacity=".28" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const pos=i=>{const r=Math.floor(i/3),cc=r%2?2-i%3:i%3;return `left:${cc*92+46}px;top:${r*92+46}px`};
+    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${stars(k)?"done":""}" style="--c:${c};${pos(j)}" data-n="${n}"><span>${n}</span><small>${stars(k)?starStr(stars(k)):"START"}</small></button>`}
     const rk=l+".r"+(g+1);
-    h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
+    h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c};${pos(6)}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
   }
   app.innerHTML=h;
   app.querySelectorAll(".node").forEach(b=>b.onclick=()=>b.dataset.r?sheet(l,null,+b.dataset.r):sheet(l,+b.dataset.n));
