@@ -185,7 +185,7 @@ function streaks(){
   for(const k of ks){const d=new Date(k+"T00:00:00");run=prev&&Math.round((d-prev)/864e5)===1?run+1:1;best=Math.max(best,run);prev=d}
   return{cur,best,today:!!days[dkey()]}
 }
-function badge(){const s=streaks();$("#streakBadge").textContent=(s.cur?"🔥 "+s.cur:"");const u=$("#userChip");u.innerHTML=USER?`👤 ${esc0(USER)} <a href="#" id="lo" style="font-weight:400;font-size:12px">switch</a>`:"";if($("#lo"))$("#lo").onclick=e=>{e.preventDefault();logout()}}
+function badge(){const s=streaks();$("#streakBadge").textContent=(s.cur?"🔥 "+s.cur:"");const u=$("#userChip");u.innerHTML=USER?`👤 ${esc0(USER.split("@")[0])} <a href="#" id="lo" style="font-weight:400;font-size:12px">switch</a>`:"";if($("#lo"))$("#lo").onclick=e=>{e.preventDefault();logout()}}
 function statsHtml(){
   const s=streaks(),all=DECK.flatMap(u=>u.words);
   const chapters=DECK.filter(u=>stars(u.level+"."+u.unit)).length;
