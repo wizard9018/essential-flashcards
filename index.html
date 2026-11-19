@@ -72,7 +72,9 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .cn{font-size:30px;font-weight:700;margin-bottom:12px}
 .srs{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:16px}
 .fld{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);width:100%}
-.cgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.cgrid{display:grid;gap:10px;grid-template-columns:repeat(5,1fr)}
+@media(max-width:900px){.cgrid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.cgrid{grid-template-columns:repeat(2,1fr)}}
 .fc{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px;min-height:150px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;text-align:center}
 .fc .w{font-size:24px;font-weight:700}.fc .p{color:var(--mute);font-style:italic;font-size:13px}
 .fc{perspective:900px;background:none;border:0;padding:0;display:block;min-height:150px}
@@ -200,6 +202,7 @@ const unitsOf=l=>DECK.filter(u=>u.level===l);
 const known=ws=>ws.filter(w=>progress[key(w.l,w.w)]===1).length;
 DECK.forEach(u=>u.words.forEach(w=>{w.l=u.level;w.cn=(window.CN&&CN[u.level+"."+u.unit]||{})[w.w]||""}));
 let lang="en";try{lang=localStorage.getItem("ef.lang")||"en"}catch(e){}
+if(lang==="zh")lang="both";
 let st=null;
 
 
@@ -295,23 +298,11 @@ const COLORS=["#2f8f5b","#2f6fa8","#a85f2f","#8a4fa8","#b0384f"];
 function xpTotal(){return qprog.xp||0}
 const wstore={get(){try{return JSON.parse(localStorage.getItem(P("wrong"))||"{}")}catch(e){return{}}},set(p){try{lsSet(P("wrong"),JSON.stringify(p))}catch(e){}}};
 let wrong=wstore.get();   // "L.word" -> consecutive correct answers since last miss; removed at 2
-const wrongWords=l=>unitsOf(l).flatMap(u=>u.words).filter(w=>(key(l,w.w) in wrong));
 function recordAnswer(l,w,ok){const k=key(l,w.w);if(!ok)wrong[k]=0;else if(k in wrong){wrong[k]++;if(wrong[k]>=2)delete wrong[k]}wstore.set(wrong)}
-function mistakes(l){
-  const ws=wrongWords(l);
-  const d=document.createElement("dialog");
-  d.innerHTML=`<h3 style="margin-top:0">📕 Mistakes (${ws.length})</h3>`+(ws.length?`<p style="color:var(--mute);max-height:140px;overflow:auto">${ws.map(w=>w.w).join(", ")}</p><p style="color:var(--mute);font-size:13px">A word leaves this list after you answer it correctly twice in a row.</p><div class="row"><button class="primary" id="mq">Quiz me</button><button id="mc">Flashcards</button><button id="mcl">Clear</button><button id="dx">Close</button></div>`:`<p>No mistakes yet. Wrong answers in quizzes are collected here.</p><div class="row"><button id="dx">Close</button></div>`);
-  document.body.appendChild(d);d.showModal();d.onclose=()=>d.remove();
-  d.querySelector("#dx").onclick=()=>d.close();
-  if(!ws.length)return;
-  d.querySelector("#mq").onclick=()=>{d.close();startQuiz(l,()=>{const bs=unitsOf(l).flatMap(u=>bank(l,u.unit)).filter(q=>(key(l,q.w.w) in wrong));return sample(bs.length?bs:unitsOf(l).flatMap(u=>bank(l,u.unit)),10)},"Mistakes",null)};
-  d.querySelector("#mc").onclick=()=>{d.close();study(l,ws,"Level "+l+" · mistakes",true)};
-  d.querySelector("#mcl").onclick=()=>{if(confirm("Clear the mistakes list for this level?")){ws.forEach(w=>delete wrong[key(l,w.w)]);wstore.set(wrong);d.close();level(l)}};
-}
 function level(l){
   st=null;qz=null;setTab(l); $("#homeBtn").classList.add("hidden"); $("#title").textContent="Essential Words";
   const us=unitsOf(l);
-  let h=tabsHtml(l)+`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to study or take the test</p><div class="row" style="justify-content:flex-start;margin-bottom:6px"><button id="all">Flashcards: whole level</button><button id="weak">Flashcards: still learning</button><button id="mist">📕 Mistakes (${wrongWords(l).length})</button></div>`;
+  let h=tabsHtml(l)+`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to study or take the test</p>`;
   for(let g=0;g<5;g++){
     const c=COLORS[g];
     h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="unitrow" style="--c:${c}">`;
@@ -321,9 +312,6 @@ function level(l){
   }
   app.innerHTML=h;wireTabs();
   app.querySelectorAll(".node").forEach(b=>b.onclick=()=>{if(b.dataset.r){const r=+b.dataset.r;startQuiz(l,()=>sample(unitBank(l,r),10),"Unit "+r+" test",l+".r"+r)}else{const n=+b.dataset.n;cards(l,n)}});
-  $("#mist").onclick=()=>mistakes(l);
-  $("#all").onclick=()=>study(l,us.flatMap(u=>u.words),"Level "+l+" · all",true);
-  $("#weak").onclick=()=>{const ws=us.flatMap(u=>u.words).filter(w=>progress[key(l,w.w)]===0);ws.length?study(l,ws,"Level "+l+" · learning",true):alert("No words marked as 'still learning' yet.")};
 }
 let flipped=new Set();
 function cards(l,n){
@@ -332,7 +320,7 @@ function cards(l,n){
   const render=()=>{
     const learned=!!chap[l+"."+n];
     app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Chapter ${n} · 20 words — tap a card to flip it</p>
-    <div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="seg">${[["en","English"],["zh","中文"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span><span><button id="flipall">Flip all</button> <button id="onebyone">One by one</button></span></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="seg">${[["en","English"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span></div>
     <div class="cgrid">${u.words.map((w,i)=>`<div class="fc ${flipped.has(i)?"flip":""}" data-i="${i}"><button class="spk" data-say="${i}" title="Pronounce">🔊</button><div class="fci">
       <div class="ft"><div class="w">${esc(w.w)}</div><div class="p">${w.pos?w.pos+".":""}</div></div>
       <div class="bk"><div class="w" style="font-size:18px">${esc(w.w)} <span class="p">${w.pos?w.pos+".":""}</span></div>${lang!=="en"?`<div class="cn" style="font-size:20px;margin:6px 0">${w.cn?esc(w.cn):""}</div>`:""}${lang!=="zh"?`<div class="def" style="font-size:15px">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex" style="font-size:13px;margin-top:6px">${hl(w.e,w.w)}</div>`:""}</div></div></div>`).join("")}</div>
@@ -340,8 +328,6 @@ function cards(l,n){
     $("#back").onclick=e=>{e.preventDefault();level(l)};
     app.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;try{localStorage.setItem("ef.lang",lang)}catch(e){}render()});
     app.querySelectorAll(".fc").forEach(c=>c.onclick=e=>{const i=+c.dataset.i;if(e.target.closest(".spk")){speak(u.words[+e.target.closest(".spk").dataset.say].w);return}flipped.has(i)?flipped.delete(i):flipped.add(i);c.classList.toggle("flip")});
-    $("#flipall").onclick=()=>{if(flipped.size<u.words.length)u.words.forEach((_,i)=>flipped.add(i));else flipped.clear();render()};
-    $("#onebyone").onclick=()=>study(l,u.words,"Level "+l+" · Chapter "+n,false,n);
     $("#learned").onclick=()=>{markLearned(l,n);touchDay();render()};
     $("#test").onclick=()=>startQuiz(l,()=>sample(bank(l,n),10),"Chapter "+n,l+"."+n);
   };
@@ -354,66 +340,26 @@ function hl(text,word){
 }
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
 function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang="en-US";u.rate=.9;speechSynthesis.speak(u)}catch(e){}}
-function study(l,ws,label,sh,unitNo){
-  st={l,i:0,flip:false,label,unitNo,all:ws,ws:sh?shuffle(ws):ws.slice()};
-  $("#homeBtn").classList.remove("hidden"); $("#title").textContent=label; draw();
-}
-function draw(){
-  const {l,i,ws,flip}=st;
-  if(i>=ws.length){
-    const k=known(ws);
-    const fresh=st.unitNo&&markLearned(l,st.unitNo);
-    app.innerHTML=`<h2>Done 🎉</h2>${st.unitNo?`<p>✅ Chapter ${st.unitNo} marked as learned.${fresh?" First review: "+chap[l+"."+st.unitNo].due+".":""}</p>`:""}<p>${k} of ${ws.length} marked as known.</p><div class="row">${st.unitNo?'<button class="primary" id="test">📝 Take the test</button>':""}<button id="again">Again</button><button id="weak2">Only the ones still learning</button><button id="lv">Back to level</button></div>`;
-    if(st.unitNo)$("#test").onclick=()=>startQuiz(l,()=>sample(bank(l,st.unitNo),10),"Chapter "+st.unitNo,l+"."+st.unitNo);
-    $("#again").onclick=()=>study(l,ws,st.label,true,st.unitNo);
-    $("#weak2").onclick=()=>{const w=ws.filter(x=>progress[key(l,x.w)]!==1);w.length?study(l,w,st.label,true,st.unitNo):alert("Everything here is marked as known!")};
-    $("#lv").onclick=()=>level(l);return}
-  const w=ws[i],s=progress[key(l,w.w)];
-  app.innerHTML=`<div class="meta"><span>${i+1} / ${ws.length}</span><span class="seg">${[["en","English"],["zh","中文"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span><span>${s===1?"✓ known":s===0?"still learning":""}</span></div>
-  <div class="scene ${st.dir>0?"pgn":st.dir<0?"pgp":""}"><div class="card ${flip?"flip":""}" id="card">
-   <div class="face"><button class="spk" id="spk" title="Pronounce (P)">🔊</button><div class="word">${esc(w.w)}</div><div class="pos">${w.pos?w.pos+".":""}</div><div class="hint">click or press Space to flip</div></div>
-   <div class="face back">${lang!=="en"?`<div class="cn">${w.cn?esc(w.cn):"(no Chinese yet)"}</div>`:""}${lang!=="zh"?`<div class="def">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex">${hl(w.e,w.w)}</div>`:""}<button class="spk" id="spk2" title="Read example">🔊</button></div>
-  </div></div>
-  <div class="row"><button id="prev">← Prev</button><button class="no" id="no">✗ Still learning (L)</button><button class="ok" id="yes">✓ Know it (K)</button><button id="next">Next →</button></div>`;
-  app.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;try{localStorage.setItem("ef.lang",lang)}catch(e){}draw()});
-  $("#card").onclick=e=>{if(e.target.closest(".spk"))return;st.flip=!st.flip;$("#card").classList.toggle("flip")};
-  $("#spk").onclick=()=>speak(w.w); $("#spk2").onclick=()=>speak(w.e||w.d);
-  $("#prev").onclick=()=>go(-1);$("#next").onclick=()=>go(1);
-  $("#yes").onclick=()=>mark(1);$("#no").onclick=()=>mark(0);
-}
-function go(d){st.dir=d;st.i=Math.max(0,st.i+d);st.flip=false;draw();st.dir=0}
-function mark(v){touchDay();const w=st.ws[st.i];progress[key(st.l,w.w)]=v;store.set(progress);go(1)}
-document.addEventListener("keydown",e=>{
-  if(!st||st.i>=st.ws.length)return;
-  if(e.key===" "||e.key==="ArrowUp"||e.key==="ArrowDown"){e.preventDefault();st.flip=!st.flip;$("#card").classList.toggle("flip")}
-  else if(e.key==="ArrowRight")go(1);else if(e.key==="ArrowLeft")go(-1);
-  else if(e.key==="k"||e.key==="K")mark(1);else if(e.key==="l"||e.key==="L")mark(0);
-  else if(e.key==="p"||e.key==="P")speak(st.flip?(st.ws[st.i].e||st.ws[st.i].d):st.ws[st.i].w);
-});
-
 let qz=null;
 const stemOf=w=>{const x=w.length>4?w.slice(0,Math.max(3,w.length-2)):w;return x.replace(/[^a-z]/g,"")};
 const mask=(t,w)=>t.replace(new RegExp("\\b"+stemOf(w)+"[a-z]*","ig"),"_____");
 function seeded(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}let a=h>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function shufR(a,r){a=a.slice();for(let i=a.length-1;i>0;i--){const j=r()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
-function mkQ(w,t,pool,r){
-  const ds=shufR(pool.filter(p=>p.w!==w.w&&p.pos===w.pos),r).concat(shufR(pool.filter(p=>p.w!==w.w&&p.pos!==w.pos),r)).slice(0,3);
-  const o=shufR([w,...ds],r),a=o.indexOf(w);
-  if(t==="meaning")return{w,t,p:w.w,sub:"What does it mean?",say:w.w,opts:o.map(x=>x.d),a};
-  if(t==="word"){const md=mask(w.d,w.w);return md===w.d?null:{w,t,p:md,sub:"Which word fits this meaning?",opts:o.map(x=>x.w),a}}
-  if(t==="blank"){const me=w.e?mask(w.e,w.w):"";return(!me||me===w.e)?null:{w,t,p:me,sub:"Fill in the blank",opts:o.map(x=>x.w),a}}
-  if(t==="zhA")return (o.every(x=>x.cn)&&new Set(o.map(x=>x.cn)).size===4)?{w,t,p:w.w,sub:"选择正确的中文意思",say:w.w,opts:o.map(x=>x.cn),a}:null;
-  if(t==="zhB")return (o.every(x=>x.cn)&&new Set(o.map(x=>x.cn)).size===4)?{w,t,p:w.cn,sub:"Which English word matches?",opts:o.map(x=>x.w),a}:null;
-  return null
+function mkQ(w,t,pool,r){   // every question: English sentence/definition with a blank, pick the word that fits
+  const src=t==="ex"?w.e:w.d;if(!src)return null;
+  const p=mask(src,w.w);if(p===src)return null;
+  const ds=shufR(pool.filter(x=>x.w!==w.w&&x.pos===w.pos),r).concat(shufR(pool.filter(x=>x.w!==w.w&&x.pos!==w.pos),r)).slice(0,3);
+  const o=shufR([w,...ds],r);
+  return{w,t,p,sub:"Choose the word that best fills the blank.",opts:o.map(x=>x.w),a:o.indexOf(w)}
 }
 const bankCache={};
-function bank(l,n){      // 30 fixed multiple-choice questions per chapter (same every time)
+function bank(l,n){      // 30 fixed fill-in-the-blank questions per chapter (same every time)
   const k=l+"."+n;if(bankCache[k])return bankCache[k];
   const r=seeded("ef"+k),u=unitsOf(l).find(x=>x.unit===n),pool=unitsOf(l).flatMap(x=>x.words);
-  const T=["meaning","word","blank","zhA","zhB"],order=shufR(u.words,r),qs=[];
-  order.forEach((w,i)=>qs.push(mkQ(w,T[i%5],pool,r)||mkQ(w,"meaning",pool,r)));
-  order.slice(0,10).forEach((w,i)=>qs.push(mkQ(w,T[(i+2)%5],pool,r)||mkQ(w,"word",pool,r)||mkQ(w,"meaning",pool,r)));
-  return bankCache[k]=qs
+  const order=shufR(u.words,r),qs=[];
+  order.forEach(w=>qs.push(mkQ(w,"ex",pool,r)||mkQ(w,"def",pool,r)));                 // 20: example sentence (or definition)
+  order.slice(0,10).forEach(w=>qs.push(mkQ(w,"def",pool,r)||mkQ(w,"ex",pool,r)));      // 10 more: definition with the word blanked
+  return bankCache[k]=qs.filter(Boolean)
 }
 function sample(qs,n){      // n random questions, different words first
   const seen=new Set(),first=[],rest=[];
@@ -451,11 +397,10 @@ function qdraw(){
     qz.res={s,xp,note};qresults();return}
   const pr=100*qz.i/qz.qs.length;
   app.innerHTML=`<div class="qtop"><button id="qx" title="Quit">✕</button><div class="qbar"><i style="width:${pr}%"></i></div><span>❤️ ${qz.hearts}</span></div>
-  <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp ${q.t==="meaning"||q.t==="zhA"||q.t==="zhB"?"big":""}">${esc(q.p)} ${q.say?'<button class="spk2" id="qs">🔊</button>':""}</div>
+  <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp">${esc(q.p)}</div>
   <div class="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}"><b>${i+1}</b> ${esc(o)}</button>`).join("")}</div></div>
   <div class="qfoot" id="qf"></div>`;
   $("#qx").onclick=()=>{if(confirm("Quit this lesson?"))level(qz.l)};
-  if(q.say)$("#qs").onclick=()=>speak(q.say);
   app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.i===q.a,+b.dataset.i));
   qz.st="ask";
 }
