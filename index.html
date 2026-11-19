@@ -39,12 +39,12 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
 .list td,.list th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 .list{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
 .ubanner{display:flex;justify-content:space-between;color:#fff;padding:12px 16px;border-radius:12px;margin:22px 0 14px}
-.snake{position:relative;width:276px;height:276px;margin:0 auto}
-.snake svg{position:absolute;inset:0}
-.node{position:absolute;transform:translate(-50%,-50%);width:76px;height:76px;border-radius:50%;background:var(--c);color:#fff;border:0;border-bottom:6px solid rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;padding:0}
-.node span{font-size:24px;font-weight:700}.node small{font-size:10px;letter-spacing:1px}
+.node{position:relative;flex:none;width:clamp(40px,10.5vw,76px);height:clamp(40px,10.5vw,76px);border-radius:50%;background:var(--c);color:#fff;border:0;border-bottom:6px solid rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;padding:0}
+.node span{font-size:clamp(15px,3.6vw,24px);font-weight:700}.node small{font-size:clamp(6px,1.5vw,10px);letter-spacing:.5px}
 .node.done{box-shadow:0 0 0 4px var(--bg),0 0 0 7px var(--c)}
-.node.review{border-radius:22px}
+.node.review{border-radius:clamp(10px,3vw,22px)}
+.unitrow{position:relative;display:flex;justify-content:space-between;align-items:center;max-width:640px;margin:0 auto;padding:8px 2px}
+.unitrow::before{content:"";position:absolute;left:4%;right:4%;top:50%;height:12px;margin-top:-6px;border-radius:6px;background:var(--c);opacity:.25}
 dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:20px;max-width:340px}
 dialog::backdrop{background:rgba(0,0,0,.45)}
 .qtop{display:flex;align-items:center;gap:12px}.qtop button{padding:4px 10px}
@@ -75,8 +75,17 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .cgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
 .fc{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px;min-height:150px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;text-align:center}
 .fc .w{font-size:24px;font-weight:700}.fc .p{color:var(--mute);font-style:italic;font-size:13px}
-.fc .bk{display:none;text-align:left}.fc.flip{border-color:var(--accent);justify-content:flex-start}.fc.flip .ft{display:none}.fc.flip .bk{display:block}
-.fc .spk{top:6px;right:6px;padding:2px 7px;font-size:13px}
+.fc{perspective:900px;background:none;border:0;padding:0;display:block;min-height:150px}
+.fc .fci{display:grid;height:100%;min-height:150px;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,.2,.2,1)}
+.fc.flip .fci{transform:rotateY(180deg)}
+.fc .ft,.fc .bk{grid-area:1/1;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px;display:flex;flex-direction:column;justify-content:center}
+.fc .ft{align-items:center;text-align:center}
+.fc .bk{transform:rotateY(180deg);text-align:left;border-color:var(--accent)}
+@keyframes pgNext{from{opacity:0;transform:perspective(1100px) rotateY(-65deg) translateX(30px)}to{opacity:1;transform:none}}
+@keyframes pgPrev{from{opacity:0;transform:perspective(1100px) rotateY(65deg) translateX(-30px)}to{opacity:1;transform:none}}
+.scene.pgn{transform-origin:left center;animation:pgNext .45s ease-out}
+.scene.pgp{transform-origin:right center;animation:pgPrev .45s ease-out}
+.fc .spk{top:6px;right:6px;padding:2px 7px;font-size:13px;z-index:2}
 .rv{background:var(--card);border:1px solid var(--line);border-left-width:5px;border-radius:12px;padding:12px 14px;margin-bottom:12px}
 .rvok{border-left-color:var(--ok)}.rvbad{border-left-color:var(--bad)}
 .rvp{font-size:18px;font-weight:600;margin:4px 0 8px}
@@ -305,11 +314,10 @@ function level(l){
   let h=tabsHtml(l)+`<p class="crumb">Level ${l} · ${xpTotal()} XP · tap a chapter to study or take the test</p><div class="row" style="justify-content:flex-start;margin-bottom:6px"><button id="all">Flashcards: whole level</button><button id="weak">Flashcards: still learning</button><button id="mist">📕 Mistakes (${wrongWords(l).length})</button></div>`;
   for(let g=0;g<5;g++){
     const c=COLORS[g];
-    h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="snake"><svg viewBox="0 0 276 276" width="276" height="276"><path d="M46 46H230A46 46 0 0 1 230 138H46V230" fill="none" stroke="${c}" stroke-opacity=".28" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    const pos=i=>{const r=Math.floor(i/3),cc=r%2?2-i%3:i%3;return `left:${cc*92+46}px;top:${r*92+46}px`};
-    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${chap[k]||stars(k)?"done":""}" style="--c:${c};${pos(j)}" data-n="${n}"><span>${n}</span><small>${chap[k]?(dueList().includes(k)?"🔁 DUE":"✓ "+starStr(stars(k)||0)):(stars(k)?starStr(stars(k)):"START")}</small></button>`}
+    h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="unitrow" style="--c:${c}">`;
+    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${chap[k]||stars(k)?"done":""}" style="--c:${c}" data-n="${n}"><span>${n}</span><small>${chap[k]?(dueList().includes(k)?"🔁 DUE":"✓ "+starStr(stars(k)||0)):(stars(k)?starStr(stars(k)):"START")}</small></button>`}
     const rk=l+".r"+(g+1);
-    h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c};${pos(6)}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
+    h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
   }
   app.innerHTML=h;wireTabs();
   app.querySelectorAll(".node").forEach(b=>b.onclick=()=>{if(b.dataset.r){const r=+b.dataset.r;startQuiz(l,()=>sample(unitBank(l,r),10),"Unit "+r+" test",l+".r"+r)}else{const n=+b.dataset.n;cards(l,n)}});
@@ -325,9 +333,9 @@ function cards(l,n){
     const learned=!!chap[l+"."+n];
     app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Chapter ${n} · 20 words — tap a card to flip it</p>
     <div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="seg">${[["en","English"],["zh","中文"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span><span><button id="flipall">Flip all</button> <button id="onebyone">One by one</button></span></div>
-    <div class="cgrid">${u.words.map((w,i)=>`<div class="fc ${flipped.has(i)?"flip":""}" data-i="${i}"><button class="spk" data-say="${i}" title="Pronounce">🔊</button>
+    <div class="cgrid">${u.words.map((w,i)=>`<div class="fc ${flipped.has(i)?"flip":""}" data-i="${i}"><button class="spk" data-say="${i}" title="Pronounce">🔊</button><div class="fci">
       <div class="ft"><div class="w">${esc(w.w)}</div><div class="p">${w.pos?w.pos+".":""}</div></div>
-      <div class="bk"><div class="w" style="font-size:18px">${esc(w.w)} <span class="p">${w.pos?w.pos+".":""}</span></div>${lang!=="en"?`<div class="cn" style="font-size:20px;margin:6px 0">${w.cn?esc(w.cn):""}</div>`:""}${lang!=="zh"?`<div class="def" style="font-size:15px">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex" style="font-size:13px;margin-top:6px">${hl(w.e,w.w)}</div>`:""}</div></div>`).join("")}</div>
+      <div class="bk"><div class="w" style="font-size:18px">${esc(w.w)} <span class="p">${w.pos?w.pos+".":""}</span></div>${lang!=="en"?`<div class="cn" style="font-size:20px;margin:6px 0">${w.cn?esc(w.cn):""}</div>`:""}${lang!=="zh"?`<div class="def" style="font-size:15px">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex" style="font-size:13px;margin-top:6px">${hl(w.e,w.w)}</div>`:""}</div></div></div>`).join("")}</div>
     <div class="row" style="margin-top:20px"><button id="learned" class="${learned?"ok":""}">${learned?"✅ Learned · next review "+chap[l+"."+n].due:"✅ Mark chapter as learned"}</button><button class="primary" id="test">📝 Take the test (10 questions)</button></div>`;
     $("#back").onclick=e=>{e.preventDefault();level(l)};
     app.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;try{localStorage.setItem("ef.lang",lang)}catch(e){}render()});
@@ -362,7 +370,7 @@ function draw(){
     $("#lv").onclick=()=>level(l);return}
   const w=ws[i],s=progress[key(l,w.w)];
   app.innerHTML=`<div class="meta"><span>${i+1} / ${ws.length}</span><span class="seg">${[["en","English"],["zh","中文"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span><span>${s===1?"✓ known":s===0?"still learning":""}</span></div>
-  <div class="scene"><div class="card ${flip?"flip":""}" id="card">
+  <div class="scene ${st.dir>0?"pgn":st.dir<0?"pgp":""}"><div class="card ${flip?"flip":""}" id="card">
    <div class="face"><button class="spk" id="spk" title="Pronounce (P)">🔊</button><div class="word">${esc(w.w)}</div><div class="pos">${w.pos?w.pos+".":""}</div><div class="hint">click or press Space to flip</div></div>
    <div class="face back">${lang!=="en"?`<div class="cn">${w.cn?esc(w.cn):"(no Chinese yet)"}</div>`:""}${lang!=="zh"?`<div class="def">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex">${hl(w.e,w.w)}</div>`:""}<button class="spk" id="spk2" title="Read example">🔊</button></div>
   </div></div>
@@ -373,7 +381,7 @@ function draw(){
   $("#prev").onclick=()=>go(-1);$("#next").onclick=()=>go(1);
   $("#yes").onclick=()=>mark(1);$("#no").onclick=()=>mark(0);
 }
-function go(d){st.i=Math.max(0,st.i+d);st.flip=false;draw()}
+function go(d){st.dir=d;st.i=Math.max(0,st.i+d);st.flip=false;draw();st.dir=0}
 function mark(v){touchDay();const w=st.ws[st.i];progress[key(st.l,w.w)]=v;store.set(progress);go(1)}
 document.addEventListener("keydown",e=>{
   if(!st||st.i>=st.ws.length)return;
