@@ -1,0 +1,131 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Essential Words Flashcards</title>
+<style>
+:root{--bg:#f6f3ec;--ink:#1f2a37;--mute:#6b7280;--card:#fff;--line:#e4ded0;--accent:#2f5d50;--ok:#2f8f5b;--bad:#c2512f}
+@media(prefers-color-scheme:dark){:root{--bg:#15191d;--ink:#e9e6df;--mute:#98a1ab;--card:#1e242a;--line:#2d353d;--accent:#7cc2a8;--ok:#5fd08e;--bad:#f08a66}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0;flex:1}
+button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.tile{text-align:left;padding:14px;border-radius:12px;display:block;width:100%}
+.tile b{font-size:17px}.tile small{display:block;color:var(--mute)}
+.bar{height:5px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.crumb{color:var(--mute);margin:0 0 14px}
+.scene{perspective:1200px;margin:10px 0 16px}
+.card{position:relative;height:340px;transform-style:preserve-3d;transition:transform .45s;cursor:pointer}
+.card.flip{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;background:var(--card);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+.back{transform:rotateY(180deg)}
+.word{font-size:clamp(34px,8vw,56px);font-weight:700;letter-spacing:.01em}
+.pos{color:var(--mute);font-style:italic;margin-top:6px}
+.def{font-size:20px}.ex{color:var(--mute);margin-top:14px;font-style:italic}
+.ex mark,.def mark{background:none;color:var(--accent);font-weight:700}
+.hint{position:absolute;bottom:12px;font-size:13px;color:var(--mute)}
+.spk{position:absolute;top:10px;right:10px;padding:6px 10px}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.row button{min-width:110px}
+.ok{border-color:var(--ok);color:var(--ok)}.no{border-color:var(--bad);color:var(--bad)}
+.meta{display:flex;justify-content:space-between;color:var(--mute);font-size:14px}
+.badge{position:absolute;top:12px;left:14px;font-size:13px}
+.list td,.list th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.list{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header><h1 id="title">Essential Words Flashcards</h1><button id="homeBtn" class="hidden">Home</button></header>
+<main id="app"></main>
+<script src="deck.js"></script>
+<script>
+const $=s=>document.querySelector(s), app=$("#app");
+const store={get(){try{return JSON.parse(localStorage.getItem("ef.progress")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.progress",JSON.stringify(p))}catch(e){}}};
+let progress=store.get();           // key "L.word" -> 1 known / 0 learning
+const key=(l,w)=>l+"."+w;
+const levels=[1,2,3,4,5,6];
+const unitsOf=l=>DECK.filter(u=>u.level===l);
+const known=ws=>ws.filter(w=>progress[key(w.l,w.w)]===1).length;
+DECK.forEach(u=>u.words.forEach(w=>w.l=u.level));
+let st=null;
+
+function home(){
+  st=null; $("#homeBtn").classList.add("hidden"); $("#title").textContent="Essential Words Flashcards";
+  app.innerHTML="<p class='crumb'>Pick a level. 30 units × 20 words each.</p><div class='grid'>"+levels.map(l=>{
+    const ws=unitsOf(l).flatMap(u=>u.words);const k=known(ws);
+    return `<button class="tile" data-l="${l}"><b>Level ${l}</b><small>${k} / ${ws.length} known</small><div class="bar"><i style="width:${100*k/ws.length}%"></i></div></button>`}).join("")+"</div>"+
+    "<p style='margin-top:28px'><button id='reset'>Reset all progress</button></p>";
+  app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>level(+b.dataset.l));
+  $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);home()}};
+}
+function level(l){
+  st=null; $("#homeBtn").classList.remove("hidden"); $("#title").textContent="Level "+l;
+  const us=unitsOf(l);
+  app.innerHTML=`<p class="crumb">Level ${l} — choose a unit</p><div class="row" style="justify-content:flex-start;margin-bottom:14px"><button class="primary" id="all">Study whole level (shuffled)</button><button id="weak">Review words I'm still learning</button></div><div class="grid">`+
+   us.map(u=>{const k=known(u.words);return `<button class="tile" data-u="${u.unit}"><b>Unit ${u.unit}</b><small>${k} / ${u.words.length} known</small><div class="bar"><i style="width:${100*k/u.words.length}%"></i></div></button>`}).join("")+"</div>";
+  app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>unit(l,+b.dataset.u));
+  $("#all").onclick=()=>study(l,us.flatMap(u=>u.words),"Level "+l+" · all",true);
+  $("#weak").onclick=()=>{const ws=us.flatMap(u=>u.words).filter(w=>progress[key(l,w.w)]===0);ws.length?study(l,ws,"Level "+l+" · learning",true):alert("No words marked as 'still learning' yet.")};
+}
+function unit(l,n){
+  const u=DECK.find(x=>x.level===l&&x.unit===n);
+  $("#homeBtn").classList.remove("hidden");
+  app.innerHTML=`<p class="crumb"><a href="#" id="back">← Level ${l}</a> · Unit ${n}</p><div class="row" style="justify-content:flex-start"><button class="primary" id="go">Start flashcards</button><button id="shuf">Shuffled</button></div>
+  <table class="list"><tr><th>Word</th><th>Meaning</th></tr>${u.words.map(w=>`<tr><td><b>${w.w}</b>${w.pos?` <i style="color:var(--mute)">${w.pos}.</i>`:""}${progress[key(l,w.w)]===1?" ✓":""}</td><td>${w.d}</td></tr>`).join("")}</table>`;
+  $("#back").onclick=e=>{e.preventDefault();level(l)};
+  $("#go").onclick=()=>study(l,u.words,"Level "+l+" · Unit "+n,false,n);
+  $("#shuf").onclick=()=>study(l,u.words,"Level "+l+" · Unit "+n,true,n);
+}
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function hl(text,word){
+  const stem=word.length>4?word.slice(0,Math.max(3,word.length-2)):word;
+  return esc(text).replace(new RegExp("\\b("+stem.replace(/[^a-z]/g,"")+"[a-z]*)","ig"),"<mark>$1</mark>");
+}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang="en-US";u.rate=.9;speechSynthesis.speak(u)}catch(e){}}
+function study(l,ws,label,sh,unitNo){
+  st={l,i:0,flip:false,label,unitNo,ws:sh?shuffle(ws):ws.slice()};
+  $("#homeBtn").classList.remove("hidden"); $("#title").textContent=label; draw();
+}
+function draw(){
+  const {l,i,ws,flip}=st;
+  if(i>=ws.length){
+    const k=known(ws);
+    app.innerHTML=`<h2>Done 🎉</h2><p>${k} of ${ws.length} marked as known.</p><div class="row"><button class="primary" id="again">Again</button><button id="weak2">Only the ones still learning</button><button id="lv">Back to level</button></div>`;
+    $("#again").onclick=()=>study(l,ws,st.label,true,st.unitNo);
+    $("#weak2").onclick=()=>{const w=ws.filter(x=>progress[key(l,x.w)]!==1);w.length?study(l,w,st.label,true,st.unitNo):alert("Everything here is marked as known!")};
+    $("#lv").onclick=()=>level(l);return}
+  const w=ws[i],s=progress[key(l,w.w)];
+  app.innerHTML=`<div class="meta"><span>${i+1} / ${ws.length}</span><span>${s===1?"✓ known":s===0?"still learning":""}</span></div>
+  <div class="scene"><div class="card ${flip?"flip":""}" id="card">
+   <div class="face"><button class="spk" id="spk" title="Pronounce (P)">🔊</button><div class="word">${esc(w.w)}</div><div class="pos">${w.pos?w.pos+".":""}</div><div class="hint">click or press Space to flip</div></div>
+   <div class="face back"><div class="def">${hl(w.d,w.w)}</div>${w.e?`<div class="ex">${hl(w.e,w.w)}</div>`:""}<button class="spk" id="spk2" title="Read example">🔊</button></div>
+  </div></div>
+  <div class="row"><button id="prev">← Prev</button><button class="no" id="no">✗ Still learning (L)</button><button class="ok" id="yes">✓ Know it (K)</button><button id="next">Next →</button></div>`;
+  $("#card").onclick=e=>{if(e.target.closest(".spk"))return;st.flip=!st.flip;$("#card").classList.toggle("flip")};
+  $("#spk").onclick=()=>speak(w.w); $("#spk2").onclick=()=>speak(w.e||w.d);
+  $("#prev").onclick=()=>go(-1);$("#next").onclick=()=>go(1);
+  $("#yes").onclick=()=>mark(1);$("#no").onclick=()=>mark(0);
+}
+function go(d){st.i=Math.max(0,st.i+d);st.flip=false;draw()}
+function mark(v){const w=st.ws[st.i];progress[key(st.l,w.w)]=v;store.set(progress);go(1)}
+document.addEventListener("keydown",e=>{
+  if(!st||st.i>=st.ws.length)return;
+  if(e.key===" "||e.key==="ArrowUp"||e.key==="ArrowDown"){e.preventDefault();st.flip=!st.flip;$("#card").classList.toggle("flip")}
+  else if(e.key==="ArrowRight")go(1);else if(e.key==="ArrowLeft")go(-1);
+  else if(e.key==="k"||e.key==="K")mark(1);else if(e.key==="l"||e.key==="L")mark(0);
+  else if(e.key==="p"||e.key==="P")speak(st.flip?(st.ws[st.i].e||st.ws[st.i].d):st.ws[st.i].w);
+});
+$("#homeBtn").onclick=home;
+home();
+</script>
+</body>
+</html>
+
