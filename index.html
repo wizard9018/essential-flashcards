@@ -109,6 +109,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 <script src="config.js?v=1"></script>
 <script src="deck.js?v=3"></script>
 <script src="cn.js?v=3"></script>
+<script src="qbank.js?v=1"></script>
 <script>
 const $=s=>document.querySelector(s), app=$("#app");
 let USER="";try{USER=localStorage.getItem("ef.user")||""}catch(e){}
@@ -356,9 +357,19 @@ const bankCache={};
 function bank(l,n){      // 30 fixed fill-in-the-blank questions per chapter (same every time)
   const k=l+"."+n;if(bankCache[k])return bankCache[k];
   const r=seeded("ef"+k),u=unitsOf(l).find(x=>x.unit===n),pool=unitsOf(l).flatMap(x=>x.words);
-  const order=shufR(u.words,r),qs=[];
-  order.forEach(w=>qs.push(mkQ(w,"ex",pool,r)||mkQ(w,"def",pool,r)));                 // 20: example sentence (or definition)
-  order.slice(0,10).forEach(w=>qs.push(mkQ(w,"def",pool,r)||mkQ(w,"ex",pool,r)));      // 10 more: definition with the word blanked
+  const gen=(window.QB&&QB[k])||null,qs=[];
+  if(gen){      // AI-written questions: 2 per word, use one for every word + a second one for 10 words
+    const by={};gen.forEach(g=>(by[g[0]]=by[g[0]]||[]).push(g));
+    const mk=(w,g)=>{const o=shufR([g[2],...g[3]],r);return{w,t:"gen",p:g[1],sub:"Choose the word that best fills the blank.",opts:o,a:o.indexOf(g[2])}};
+    const order=shufR(u.words,r);
+    order.forEach(w=>{const g=(by[w.w]||[])[0];if(g)qs.push(mk(w,g))});
+    order.slice(0,10).forEach(w=>{const g=(by[w.w]||[])[1];if(g)qs.push(mk(w,g))});
+    if(qs.length>=30)return bankCache[k]=qs
+    qs.length=0
+  }
+  const order=shufR(u.words,r);      // fallback: blank out the textbook example / definition
+  order.forEach(w=>qs.push(mkQ(w,"ex",pool,r)||mkQ(w,"def",pool,r)));
+  order.slice(0,10).forEach(w=>qs.push(mkQ(w,"def",pool,r)||mkQ(w,"ex",pool,r)));
   return bankCache[k]=qs.filter(Boolean)
 }
 function sample(qs,n){      // n random questions, different words first
