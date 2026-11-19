@@ -68,26 +68,54 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .chart{display:flex;align-items:flex-end;gap:5px;height:90px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin-bottom:6px}
 .chart div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-size:10px;color:var(--mute)}
 .chart i{display:block;width:100%;background:var(--ok);border-radius:3px 3px 0 0;min-height:2px;opacity:.9}
+.seg button{padding:3px 10px;border-radius:8px;font-size:13px;margin-left:4px}
+.seg button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cn{font-size:30px;font-weight:700;margin-bottom:12px}
+.srs{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:16px}
 .hidden{display:none}
 </style>
 </head>
 <body>
-<header><h1 id="title">Essential Words Flashcards</h1><span id="streakBadge" class="badge2"></span><button id="homeBtn" class="hidden">Home</button></header>
+<header><h1 id="title">Essential Words Flashcards</h1><span id="streakBadge" class="badge2"></span><span id="userChip" class="badge2"></span><button id="homeBtn" class="hidden">Home</button></header>
 <main id="app"></main>
 <script src="deck.js"></script>
+<script src="cn.js"></script>
 <script>
 const $=s=>document.querySelector(s), app=$("#app");
-const store={get(){try{return JSON.parse(localStorage.getItem("ef.progress")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.progress",JSON.stringify(p))}catch(e){}}};
+let USER="";try{USER=localStorage.getItem("ef.user")||""}catch(e){}
+const P=k=>"ef."+USER+"."+k;
+const jget=(k,d)=>{try{return JSON.parse(localStorage.getItem(P(k))||"null")||d}catch(e){return d}};
+const jset=(k,v)=>{try{localStorage.setItem(P(k),JSON.stringify(v))}catch(e){}};
+function loginScreen(){
+  let users=[];try{users=JSON.parse(localStorage.getItem("ef.users")||"[]")}catch(e){}
+  $("#title").textContent="Essential Words";
+  app.innerHTML=`<div class="qend"><h2>👋 Who's studying?</h2><p class="crumb">Each profile keeps its own progress, review plan and test records on this device.</p>
+  <div class="row" style="margin-bottom:16px">${users.map(u=>`<button class="primary" data-u="${esc0(u)}">${esc0(u)}</button>`).join("")}</div>
+  <div class="row"><input id="nm" placeholder="New name" maxlength="20" style="font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)"><button id="newu">Start</button></div></div>`;
+  const enter=n=>{n=n.trim();if(!n)return;if(!users.includes(n)){
+      // first profile adopts any pre-profile progress stored by the older version
+      if(!users.length)["progress","quiz","wrong","days"].forEach(k=>{const v=localStorage.getItem("ef."+k);if(v!=null)localStorage.setItem("ef."+n+"."+k,v)});
+      users.push(n);localStorage.setItem("ef.users",JSON.stringify(users))}
+    localStorage.setItem("ef.user",n);localStorage.setItem("ef."+n+".lastLogin",dkeyNow());location.reload()};
+  app.querySelectorAll("[data-u]").forEach(b=>b.onclick=()=>enter(b.dataset.u));
+  $("#newu").onclick=()=>enter($("#nm").value);$("#nm").onkeydown=e=>{if(e.key==="Enter")enter($("#nm").value)};
+}
+const dkeyNow=()=>{const x=new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
+const esc0=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function logout(){try{localStorage.removeItem("ef.user")}catch(e){}location.reload()}
+
+const store={get(){try{return JSON.parse(localStorage.getItem(P("progress"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("progress"),JSON.stringify(p))}catch(e){}}};
 let progress=store.get();           // key "L.word" -> 1 known / 0 learning
 const key=(l,w)=>l+"."+w;
 const levels=[1,2,3,4,5,6];
 const unitsOf=l=>DECK.filter(u=>u.level===l);
 const known=ws=>ws.filter(w=>progress[key(w.l,w.w)]===1).length;
-DECK.forEach(u=>u.words.forEach(w=>w.l=u.level));
+DECK.forEach(u=>u.words.forEach(w=>{w.l=u.level;w.cn=(window.CN&&CN[u.level+"."+u.unit]||{})[w.w]||""}));
+let lang="both";try{lang=localStorage.getItem("ef.lang")||"both"}catch(e){}
 let st=null;
 
 
-const dstore={get(){try{return JSON.parse(localStorage.getItem("ef.days")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.days",JSON.stringify(p))}catch(e){}}};
+const dstore={get(){try{return JSON.parse(localStorage.getItem(P("days"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("days"),JSON.stringify(p))}catch(e){}}};
 let days=dstore.get();   // "YYYY-MM-DD" -> words practiced that day
 const dkey=d=>{const x=d||new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
 const dayShift=n=>{const d=new Date();d.setDate(d.getDate()+n);return d};
@@ -99,7 +127,7 @@ function streaks(){
   for(const k of ks){const d=new Date(k+"T00:00:00");run=prev&&Math.round((d-prev)/864e5)===1?run+1:1;best=Math.max(best,run);prev=d}
   return{cur,best,today:!!days[dkey()]}
 }
-function badge(){const s=streaks();$("#streakBadge").textContent=(s.cur?"🔥 "+s.cur:"")}
+function badge(){const s=streaks();$("#streakBadge").textContent=(s.cur?"🔥 "+s.cur:"");const u=$("#userChip");u.innerHTML=USER?`👤 ${esc0(USER)} <a href="#" id="lo" style="font-weight:400;font-size:12px">switch</a>`:"";if($("#lo"))$("#lo").onclick=e=>{e.preventDefault();logout()}}
 function statsHtml(){
   const s=streaks(),all=DECK.flatMap(u=>u.words);
   const chapters=DECK.filter(u=>stars(u.level+"."+u.unit)).length;
@@ -115,21 +143,61 @@ function statsHtml(){
    <div class="stat"><b>★ ${starSum}</b><small>stars</small></div>
   </div><div class="chart">${bars}</div><p class="crumb" style="font-size:12px;margin:0 0 20px">Last 14 days · answers per day</p>`
 }
+
+const INTERVALS=[1,2,4,7,15,30];           // days after learning / after each successful review
+let chap=jget("chap",{});                  // "L.n" -> {learned:"YYYY-MM-DD", step:0..6, due:"YYYY-MM-DD", reviews:[{d,pct,ok}]}
+let tests=jget("tests",[]);                // [{k,d,pct,type}]
+const addDays=(ds,n)=>{const d=new Date(ds+"T00:00:00");d.setDate(d.getDate()+n);return dkey(d)};
+const saveChap=()=>jset("chap",chap), saveTests=()=>jset("tests",tests);
+function markLearned(l,n){const k=l+"."+n;if(chap[k])return false;chap[k]={learned:dkey(),step:0,due:addDays(dkey(),INTERVALS[0]),reviews:[]};saveChap();return true}
+function dueList(){const t=dkey();return Object.keys(chap).filter(k=>chap[k].step<INTERVALS.length&&chap[k].due<=t).sort((a,b)=>chap[a].due.localeCompare(chap[b].due)||a.localeCompare(b,undefined,{numeric:true}))}
+function reviewResult(k,pct){
+  const c=chap[k];if(!c)return;const ok=pct>=.7;c.reviews.push({d:dkey(),pct:Math.round(pct*100),ok});
+  if(ok){c.step++;c.due=c.step<INTERVALS.length?addDays(dkey(),INTERVALS[c.step]):"done"}else{c.step=0;c.due=addDays(dkey(),1)}
+  saveChap();return ok
+}
+let reviewQueue=[];
+function startReview(keys){
+  reviewQueue=keys.slice();nextReview()
+}
+function nextReview(){
+  const k=reviewQueue.shift();if(!k){home();return}
+  const [l,n]=k.split(".").map(Number),u=unitsOf(l).find(x=>x.unit===n);
+  startQuiz(l,u.words,"Review · L"+l+" Ch."+n,null,k)
+}
+function scheduleHtml(){
+  const due=dueList(),t=dkey();
+  const upcoming=Object.keys(chap).filter(k=>chap[k].step<INTERVALS.length&&chap[k].due>t).sort((a,b)=>chap[a].due.localeCompare(chap[b].due)).slice(0,8);
+  const lab=k=>{const [l,n]=k.split(".");return "Level "+l+" · Chapter "+n};
+  let h=`<div class="srs"><b>🔁 Today's review</b>`;
+  if(!Object.keys(chap).length)h+=`<p class="crumb">Finish a chapter's flashcards and it will be scheduled for review (day 1, 2, 4, 7, 15, 30).</p>`;
+  else if(!due.length)h+=`<p class="crumb">Nothing due today. 🎉</p>`;
+  else h+=`<p class="crumb">${due.length} chapter${due.length>1?"s":""} due: ${due.slice(0,6).map(lab).join(" · ")}${due.length>6?" …":""}</p><button class="primary" id="startRev">Start review (${due.length})</button>`;
+  if(upcoming.length)h+=`<p class="crumb" style="margin:10px 0 0;font-size:13px">Coming up: ${upcoming.map(k=>`${lab(k).replace("Level ","L").replace(" · Chapter "," Ch.")} (${chap[k].due.slice(5)})`).join(" · ")}</p>`;
+  return h+`</div>`
+}
+function progressHtml(){
+  const learned=Object.keys(chap).length,mastered=Object.values(chap).filter(c=>c.step>=INTERVALS.length).length;
+  const revs=Object.values(chap).reduce((a,c)=>a+c.reviews.length,0),ts=tests.filter(x=>x.type==="test");
+  const avg=ts.length?Math.round(ts.reduce((a,x)=>a+x.pct,0)/ts.length):0;
+  return `<div class="stats"><div class="stat"><b>${learned}</b><small>chapters learned</small></div><div class="stat"><b>${revs}</b><small>reviews done</small></div><div class="stat"><b>${mastered}</b><small>fully reviewed</small></div><div class="stat"><b>${ts.length}</b><small>tests taken${ts.length?` · avg ${avg}%`:""}</small></div></div>`
+}
 function home(){
   st=null; $("#homeBtn").classList.add("hidden"); $("#title").textContent="Essential Words Flashcards";
-  app.innerHTML=statsHtml()+"<p class='crumb'>Pick a level. 30 chapters × 20 words each.</p><div class='grid'>"+levels.map(l=>{
+  app.innerHTML=scheduleHtml()+statsHtml()+progressHtml()+"<p class='crumb'>Pick a level. 30 chapters × 20 words each.</p><div class='grid'>"+levels.map(l=>{
     const ws=unitsOf(l).flatMap(u=>u.words);const k=known(ws);
     return `<button class="tile" data-l="${l}"><b>Level ${l}</b><small>${k} / ${ws.length} known</small><div class="bar"><i style="width:${100*k/ws.length}%"></i></div></button>`}).join("")+"</div>"+
     "<p style='margin-top:28px'><button id='reset'>Reset all progress</button></p>";
   app.querySelectorAll(".tile").forEach(b=>b.onclick=()=>level(+b.dataset.l));
-  $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);qprog={};qstore.set(qprog);wrong={};wstore.set(wrong);days={};dstore.set(days);badge();home()}};
+  if($("#startRev"))$("#startRev").onclick=()=>startReview(dueList());
+  $("#reset").onclick=()=>{if(confirm("Erase all progress?")){progress={};store.set(progress);qprog={};qstore.set(qprog);wrong={};wstore.set(wrong);days={};dstore.set(days);chap={};saveChap();tests=[];saveTests();badge();home()}};
 }
-const qstore={get(){try{return JSON.parse(localStorage.getItem("ef.quiz")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.quiz",JSON.stringify(p))}catch(e){}}};
+const qstore={get(){try{return JSON.parse(localStorage.getItem(P("quiz"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("quiz"),JSON.stringify(p))}catch(e){}}};
 let qprog=qstore.get(); const stars=k=>qprog[k]||0;
 const starStr=n=>"★".repeat(n)+"☆".repeat(3-n);
 const COLORS=["#2f8f5b","#2f6fa8","#a85f2f","#8a4fa8","#b0384f"];
 function xpTotal(){return qprog.xp||0}
-const wstore={get(){try{return JSON.parse(localStorage.getItem("ef.wrong")||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem("ef.wrong",JSON.stringify(p))}catch(e){}}};
+const wstore={get(){try{return JSON.parse(localStorage.getItem(P("wrong"))||"{}")}catch(e){return{}}},set(p){try{localStorage.setItem(P("wrong"),JSON.stringify(p))}catch(e){}}};
 let wrong=wstore.get();   // "L.word" -> consecutive correct answers since last miss; removed at 2
 const wrongWords=l=>unitsOf(l).flatMap(u=>u.words).filter(w=>(key(l,w.w) in wrong));
 function recordAnswer(l,w,ok){const k=key(l,w.w);if(!ok)wrong[k]=0;else if(k in wrong){wrong[k]++;if(wrong[k]>=2)delete wrong[k]}wstore.set(wrong)}
@@ -152,27 +220,15 @@ function level(l){
     const c=COLORS[g];
     h+=`<div class="ubanner" style="background:${c}"><b>Unit ${g+1}</b><span>Chapters ${g*6+1}–${g*6+6}</span></div><div class="snake"><svg viewBox="0 0 276 276" width="276" height="276"><path d="M46 46H230A46 46 0 0 1 230 138H46V230" fill="none" stroke="${c}" stroke-opacity=".28" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     const pos=i=>{const r=Math.floor(i/3),cc=r%2?2-i%3:i%3;return `left:${cc*92+46}px;top:${r*92+46}px`};
-    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${stars(k)?"done":""}" style="--c:${c};${pos(j)}" data-n="${n}"><span>${n}</span><small>${stars(k)?starStr(stars(k)):"START"}</small></button>`}
+    for(let j=0;j<6;j++){const n=g*6+j+1;const k=l+"."+n;h+=`<button class="node ${chap[k]||stars(k)?"done":""}" style="--c:${c};${pos(j)}" data-n="${n}"><span>${n}</span><small>${chap[k]?(dueList().includes(k)?"🔁 DUE":"✓ "+starStr(stars(k)||0)):(stars(k)?starStr(stars(k)):"START")}</small></button>`}
     const rk=l+".r"+(g+1);
     h+=`<button class="node review ${stars(rk)?"done":""}" style="--c:${c};${pos(6)}" data-r="${g+1}"><span>🏆</span><small>${stars(rk)?starStr(stars(rk)):"TEST"}</small></button></div>`;
   }
   app.innerHTML=h;
-  app.querySelectorAll(".node").forEach(b=>b.onclick=()=>b.dataset.r?sheet(l,null,+b.dataset.r):sheet(l,+b.dataset.n));
+  app.querySelectorAll(".node").forEach(b=>b.onclick=()=>{if(b.dataset.r){const r=+b.dataset.r;startQuiz(l,shuffle(unitsOf(l).filter(u=>u.unit>(r-1)*6&&u.unit<=r*6).flatMap(u=>u.words)).slice(0,20),"Unit "+r+" test",l+".r"+r)}else{const n=+b.dataset.n;study(l,unitsOf(l).find(u=>u.unit===n).words,"Level "+l+" · Chapter "+n,false,n)}});
   $("#mist").onclick=()=>mistakes(l);
   $("#all").onclick=()=>study(l,us.flatMap(u=>u.words),"Level "+l+" · all",true);
   $("#weak").onclick=()=>{const ws=us.flatMap(u=>u.words).filter(w=>progress[key(l,w.w)]===0);ws.length?study(l,ws,"Level "+l+" · learning",true):alert("No words marked as 'still learning' yet.")};
-}
-function sheet(l,n,r){
-  const d=document.createElement("dialog");
-  const title=r?`Unit ${r} test`:`Chapter ${n}`;
-  d.innerHTML=`<h3 style="margin-top:0">${title}</h3><p style="color:var(--mute)">${r?"20 questions from chapters "+((r-1)*6+1)+"–"+(r*6)+".":"20 words."}</p><div class="row"><button class="primary" id="dq">Start quiz</button>${r?"":'<button id="dc">Flashcards</button>'}<button id="dx">Close</button></div>`;
-  document.body.appendChild(d);d.showModal();
-  d.querySelector("#dx").onclick=()=>{d.close()};
-  d.onclose=()=>d.remove();
-  d.querySelector("#dq").onclick=()=>{d.close();
-    if(r){const ws=shuffle(unitsOf(l).filter(u=>u.unit>(r-1)*6&&u.unit<=r*6).flatMap(u=>u.words)).slice(0,20);startQuiz(l,ws,"Unit "+r+" test",l+".r"+r)}
-    else startQuiz(l,unitsOf(l).find(u=>u.unit===n).words,"Chapter "+n,l+"."+n)};
-  if(!r)d.querySelector("#dc").onclick=()=>{d.close();unit(l,n)};
 }
 function unit(l,n){
   const u=DECK.find(x=>x.level===l&&x.unit===n);
@@ -191,24 +247,27 @@ function hl(text,word){
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
 function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang="en-US";u.rate=.9;speechSynthesis.speak(u)}catch(e){}}
 function study(l,ws,label,sh,unitNo){
-  st={l,i:0,flip:false,label,unitNo,ws:sh?shuffle(ws):ws.slice()};
+  st={l,i:0,flip:false,label,unitNo,all:ws,ws:sh?shuffle(ws):ws.slice()};
   $("#homeBtn").classList.remove("hidden"); $("#title").textContent=label; draw();
 }
 function draw(){
   const {l,i,ws,flip}=st;
   if(i>=ws.length){
     const k=known(ws);
-    app.innerHTML=`<h2>Done 🎉</h2><p>${k} of ${ws.length} marked as known.</p><div class="row"><button class="primary" id="again">Again</button><button id="weak2">Only the ones still learning</button><button id="lv">Back to level</button></div>`;
+    const fresh=st.unitNo&&markLearned(l,st.unitNo);
+    app.innerHTML=`<h2>Done 🎉</h2>${st.unitNo?`<p>✅ Chapter ${st.unitNo} marked as learned.${fresh?" First review: "+chap[l+"."+st.unitNo].due+".":""}</p>`:""}<p>${k} of ${ws.length} marked as known.</p><div class="row">${st.unitNo?'<button class="primary" id="test">📝 Take the test</button>':""}<button id="again">Again</button><button id="weak2">Only the ones still learning</button><button id="lv">Back to level</button></div>`;
+    if(st.unitNo)$("#test").onclick=()=>startQuiz(l,st.all,"Chapter "+st.unitNo,l+"."+st.unitNo);
     $("#again").onclick=()=>study(l,ws,st.label,true,st.unitNo);
     $("#weak2").onclick=()=>{const w=ws.filter(x=>progress[key(l,x.w)]!==1);w.length?study(l,w,st.label,true,st.unitNo):alert("Everything here is marked as known!")};
     $("#lv").onclick=()=>level(l);return}
   const w=ws[i],s=progress[key(l,w.w)];
-  app.innerHTML=`<div class="meta"><span>${i+1} / ${ws.length}</span><span>${s===1?"✓ known":s===0?"still learning":""}</span></div>
+  app.innerHTML=`<div class="meta"><span>${i+1} / ${ws.length}</span><span class="seg">${[["en","English"],["zh","中文"],["both","中+EN"]].map(([k,t])=>`<button data-lang="${k}" class="${lang===k?"on":""}">${t}</button>`).join("")}</span><span>${s===1?"✓ known":s===0?"still learning":""}</span></div>
   <div class="scene"><div class="card ${flip?"flip":""}" id="card">
    <div class="face"><button class="spk" id="spk" title="Pronounce (P)">🔊</button><div class="word">${esc(w.w)}</div><div class="pos">${w.pos?w.pos+".":""}</div><div class="hint">click or press Space to flip</div></div>
-   <div class="face back"><div class="def">${hl(w.d,w.w)}</div>${w.e?`<div class="ex">${hl(w.e,w.w)}</div>`:""}<button class="spk" id="spk2" title="Read example">🔊</button></div>
+   <div class="face back">${lang!=="en"?`<div class="cn">${w.cn?esc(w.cn):"(no Chinese yet)"}</div>`:""}${lang!=="zh"?`<div class="def">${hl(w.d,w.w)}</div>`:""}${w.e?`<div class="ex">${hl(w.e,w.w)}</div>`:""}<button class="spk" id="spk2" title="Read example">🔊</button></div>
   </div></div>
   <div class="row"><button id="prev">← Prev</button><button class="no" id="no">✗ Still learning (L)</button><button class="ok" id="yes">✓ Know it (K)</button><button id="next">Next →</button></div>`;
+  app.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;try{localStorage.setItem("ef.lang",lang)}catch(e){}draw()});
   $("#card").onclick=e=>{if(e.target.closest(".spk"))return;st.flip=!st.flip;$("#card").classList.toggle("flip")};
   $("#spk").onclick=()=>speak(w.w); $("#spk2").onclick=()=>speak(w.e||w.d);
   $("#prev").onclick=()=>go(-1);$("#next").onclick=()=>go(1);
@@ -240,19 +299,23 @@ function makeQ(w,pool){
   if(t==="blank"){const o=shuffle([w,...ds]);return{w,t,p:me,sub:"Fill in the blank",opts:o.map(x=>x.w),a:o.indexOf(w)}}
   return{w,t,p:md,sub:"Type the word",type:true}
 }
-function startQuiz(l,ws,label,k){
+function startQuiz(l,ws,label,k,rev){
   const pool=unitsOf(l).flatMap(u=>u.words);
-  st=null;qz={l,k,label,pool,words:ws,qs:shuffle(ws).map(w=>makeQ(w,pool)),i:0,hearts:5,right:0,seen:0,st:"ask"};
+  st=null;qz={l,k,label,rev,pool,words:ws,qs:shuffle(ws).map(w=>makeQ(w,pool)),i:0,hearts:5,right:0,seen:0,st:"ask"};
   $("#homeBtn").classList.remove("hidden");$("#title").textContent=label;qdraw();
 }
 function qdraw(){
   const q=qz.qs[qz.i];
-  if(qz.hearts<=0){app.innerHTML=`<div class="qend"><h2>Out of hearts 💔</h2><p>Review the words and try again.</p><div class="row"><button class="primary" id="r1">Try again</button><button id="r2">Back</button></div></div>`;$("#r1").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);$("#r2").onclick=()=>level(qz.l);return}
+  if(qz.hearts<=0){app.innerHTML=`<div class="qend"><h2>Out of hearts 💔</h2><p>Review the words and try again.</p><div class="row"><button class="primary" id="r1">Try again</button><button id="r2">Back</button></div></div>`;$("#r1").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k,qz.rev);$("#r2").onclick=()=>qz.rev?home():level(qz.l);return}
   if(!q){
     const acc=qz.right/qz.seen,s=acc>=.9?3:acc>=.7?2:1,xp=qz.right*10+(s===3?20:0);
     if(qz.k)qprog[qz.k]=Math.max(stars(qz.k),s);qprog.xp=xpTotal()+xp;qstore.set(qprog);
-    app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p><div class="row"><button class="primary" id="r1">Continue</button><button id="r2">Again</button></div></div>`;
-    $("#r1").onclick=()=>level(qz.l);$("#r2").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);return}
+    let note="";
+    if(qz.rev){const ok=reviewResult(qz.rev,acc);tests.push({k:qz.rev,d:dkey(),pct:Math.round(acc*100),type:"review"});note=ok?"Review passed — next one on "+chap[qz.rev].due+".":"Below 70% — this chapter restarts the schedule (review again tomorrow)."}
+    else if(qz.k){tests.push({k:qz.k,d:dkey(),pct:Math.round(acc*100),type:"test"});if(/^\d+\.\d+$/.test(qz.k)&&!chap[qz.k]&&acc>=.7){markLearned(...qz.k.split(".").map(Number));note="Chapter marked as learned; first review "+chap[qz.k].due+"."}}
+    saveTests();
+    app.innerHTML=`<div class="qend"><h2>Lesson complete!</h2><div class="bigstars">${starStr(s)}</div><p>${qz.right} / ${qz.seen} correct · <b>+${xp} XP</b></p>${note?`<p class="crumb">${note}</p>`:""}<div class="row"><button class="primary" id="r1">${qz.rev&&reviewQueue.length?"Next review ("+reviewQueue.length+" left)":"Continue"}</button>${qz.rev?"":'<button id="r2">Again</button>'}</div></div>`;
+    $("#r1").onclick=()=>qz.rev?nextReview():level(qz.l);if($("#r2"))$("#r2").onclick=()=>startQuiz(qz.l,qz.words,qz.label,qz.k);return}
   const pr=100*qz.i/qz.qs.length;
   app.innerHTML=`<div class="qtop"><button id="qx" title="Quit">✕</button><div class="qbar"><i style="width:${pr}%"></i></div><span>❤️ ${qz.hearts}</span></div>
   <div class="qbody"><div class="qsub">${q.sub}</div><div class="qp ${q.t==="meaning"?"big":""}">${esc(q.p)} ${q.say?'<button class="spk2" id="qs">🔊</button>':""}</div>
@@ -283,7 +346,7 @@ document.addEventListener("keydown",e=>{
   else if(qz.st==="done"&&e.key==="Enter"&&document.activeElement.id!=="nx"){e.preventDefault();qnext()}
 });
 $("#homeBtn").onclick=()=>{qz=null;home()};
-badge();home();
+if(!USER)loginScreen();else{try{localStorage.setItem(P("lastLogin"),dkeyNow())}catch(e){}badge();home()}
 </script>
 </body>
 </html>
