@@ -164,7 +164,9 @@ function loginScreen(){
   ${sb?`<p class="crumb">Sign in to sync your progress across devices.</p>
   <div style="display:grid;gap:10px;max-width:300px;margin:0 auto 10px"><input id="em" type="email" autocomplete="email" placeholder="Email" class="fld"><input id="pw" type="password" autocomplete="current-password" placeholder="Password (6+ characters)" class="fld">
   <div class="row"><button class="primary" id="si">Sign in</button><button id="su">Create account</button></div><p id="msg" class="crumb" style="min-height:1.4em"></p></div>`:""}
-  <p class="crumb" style="margin-top:20px">Or study on this device only (no sync):</p>
+  <div class="row" style="margin-top:14px"><button id="guest">👤 Continue as Guest</button></div>
+  <p class="crumb" style="margin:6px 0 0;font-size:12px">Guest progress is saved in this browser only (no sync).</p>
+  <p class="crumb" style="margin-top:20px">Or a named profile on this device:</p>
   <div class="row" style="margin-bottom:10px">${users.filter(u=>!u.includes("@")).map(u=>`<button data-u="${esc0(u)}">${esc0(u)}</button>`).join("")}</div>
   <div class="row"><input id="nm" placeholder="New name" maxlength="20" class="fld" style="max-width:160px"><button id="newu">Start</button></div></div>`;
   const enter=(n,cloud)=>{n=n.trim();if(!n)return;if(!users.includes(n)){
@@ -173,6 +175,7 @@ function loginScreen(){
     localStorage.setItem("ef.user",n);if(cloud)localStorage.setItem("ef.sb","1");else localStorage.removeItem("ef.sb");
     localStorage.setItem("ef."+n+".lastLogin",dkeyNow());location.reload()};
   app.querySelectorAll("[data-u]").forEach(b=>b.onclick=()=>enter(b.dataset.u,false));
+  $("#guest").onclick=()=>enter("Guest",false);
   $("#newu").onclick=()=>enter($("#nm").value,false);$("#nm").onkeydown=e=>{if(e.key==="Enter")enter($("#nm").value,false)};
   if(sb){
     const msg=t=>$("#msg").textContent=t;
